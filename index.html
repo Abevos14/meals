@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meals</title>
+  <meta name="description" content="My meals, macros, and grocery list.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f6f4ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14171a" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Meals">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Apply saved theme before first paint (auto follows the phone setting)
+    try { var t = localStorage.getItem("meals-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="top">
+    <button id="back" class="icon-btn" aria-label="Back" hidden>&#8249;</button>
+    <h1 id="title">Meals</h1>
+    <button id="theme" class="icon-btn small" aria-label="Change theme">Auto</button>
+  </header>
+
+  <main id="view" tabindex="-1"></main>
+
+  <nav class="tabs" aria-label="Main">
+    <a href="#/" data-tab="home">Meals</a>
+    <a href="#/today" data-tab="today">Today</a>
+    <a href="#/grocery" data-tab="grocery">Grocery</a>
+  </nav>
+
+  <script src="meals.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
