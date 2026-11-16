@@ -22,11 +22,16 @@
    After any edit: bump CACHE in sw.js, then git add . / commit / push.
    ===================================================================== */
 
+// Daily targets. You can also change these in the app (gear button, top right).
 const TARGETS = {
-  proteinMin: 190,   // grams per day
-  proteinMax: 200,
-  fiber: 40          // grams per day
+  proteinMin: 190,    proteinMax: 200,    // grams
+  fiber: 40,                              // grams, at least
+  carbsMin: 180,      carbsMax: 300,      // grams
+  caloriesMin: 3100,  caloriesMax: 3300   // lean bulk at 6'2", 175 lb
 };
+
+// Meals starred by default. Tap the star on any meal in the app to change.
+const DEFAULT_FAVORITES = ["eggs-sourdough", "cottage-toast", "chicken-eggs-milk", "chicken-rice-eggs"];
 
 const CATEGORIES = [
   { id: "breakfast", name: "Breakfast", emoji: "🍳",  hint: "Before noon is fine" },
@@ -45,7 +50,7 @@ const MEALS = [
     servings: 1,
     time: "8 min",
     ingredients: [
-      { item: "Eggs", qty: 5, unit: "each" },
+      { item: "Eggs", qty: 4, unit: "each" },
       { item: "Cottage cheese", qty: 0.5, unit: "cup" },
       { item: "Sauerkraut", qty: 0.25, unit: "cup", note: "on the side, cold" },
       { item: "Sourdough bread", qty: 1, unit: "slice" },
@@ -59,8 +64,8 @@ const MEALS = [
       "Toast the sourdough.",
       "Plate with the sauerkraut cold on the side. Do not heat the kraut, heat kills the live cultures.",
     ],
-    macros: { protein: 47, carbs: 33, fat: 35, fiber: 2, calories: 625 },
-    cost: 2.13,
+    macros: { protein: 41, carbs: 32, fat: 30, fiber: 2, calories: 555 },
+    cost: 1.90,
     notes: "For live cultures, buy refrigerated raw sauerkraut. Shelf-stable jars are pasteurized."
   },
   {
@@ -113,6 +118,29 @@ const MEALS = [
     cost: 2.87
   },
   {
+    id: "chicken-eggs-milk",
+    name: "Chicken, Eggs, and Milk",
+    emoji: "🥚",
+    category: "breakfast",
+    servings: 1,
+    time: "8 min",
+    ingredients: [
+      { item: "Eggs", qty: 4, unit: "each" },
+      { item: "Chicken breast", qty: 4, unit: "oz", note: "raw weight, about 85 g cooked, batch chicken works" },
+      { item: "Whole milk", qty: 1.5, unit: "cup", note: "a big glass" },
+      { item: "Olive oil", qty: 1, unit: "tsp" },
+      { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
+    ],
+    steps: [
+      "Heat oil in a pan on medium.",
+      "Add the chopped chicken. Batch chicken: warm it 1 minute. Raw: cook 6 to 7 minutes until no pink is left.",
+      "Push the chicken aside. Scramble the 4 eggs next to it, 2 to 3 minutes.",
+      "Season everything. Big glass of milk on the side.",
+    ],
+    macros: { protein: 61, carbs: 20, fat: 39, fiber: 0, calories: 665 },
+    cost: 1.91
+  },
+  {
     id: "eggs-sourdough",
     name: "Eggs on Sourdough",
     emoji: "🍞",
@@ -148,7 +176,7 @@ const MEALS = [
       { item: "Protein noodles", qty: 2, unit: "oz", note: "dry" },
       { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "1 serving" },
       { item: "Broccoli, fresh", qty: 1, unit: "cup" },
-      { item: "Homemade ranch", qty: 2, unit: "tbsp" },
+      { item: "Ranch dressing", qty: 2, unit: "tbsp" },
       { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
     ],
     steps: [
@@ -157,8 +185,8 @@ const MEALS = [
       "Bowl: rice and noodles on the bottom, then chicken and broccoli.",
       "Cottage cheese on top. Season. Finish with ranch.",
     ],
-    macros: { protein: 73, carbs: 85, fat: 12, fiber: 8, calories: 700 },
-    cost: 2.61,
+    macros: { protein: 71, carbs: 84, fat: 25, fiber: 8, calories: 800 },
+    cost: 2.59,
     notes: "Chicken, rice, protein noodles, and cottage cheese in one bowl. Lower carb: skip the rice, keep the noodles."
   },
   {
@@ -173,17 +201,16 @@ const MEALS = [
       { item: "Chicken breast", qty: 4, unit: "oz", note: "raw weight, about 85 g cooked, chopped" },
       { item: "Black beans, canned", qty: 0.5, unit: "cup", note: "drained, lightly mashed" },
       { item: "Shredded cheese", qty: 0.5, unit: "cup" },
-      { item: "Salsa", qty: 2, unit: "tbsp" },
-      { item: "Homemade ranch", qty: 2, unit: "tbsp", note: "for dipping" },
+      { item: "Ranch dressing", qty: 2, unit: "tbsp", note: "for dipping" },
     ],
     steps: [
       "Mash the beans a little with a fork so they stick.",
       "Spread beans on half of each tortilla. Add chicken and cheese. Fold.",
       "Dry pan on medium. Cook 2 to 3 minutes a side until crisp and the cheese melts.",
-      "Cut in half. Dip in salsa and ranch.",
+      "Cut in half. Dip in ranch.",
     ],
-    macros: { protein: 59, carbs: 65, fat: 28, fiber: 37, calories: 630 },
-    cost: 2.53,
+    macros: { protein: 56, carbs: 62, fat: 41, fiber: 37, calories: 720 },
+    cost: 2.43,
     notes: "One of the best fiber meals in the app: the tortillas and beans carry it."
   },
   {
@@ -198,7 +225,7 @@ const MEALS = [
       { item: "Black beans, canned", qty: 0.5, unit: "cup", note: "drained" },
       { item: "White basmati rice", qty: 0.25, unit: "cup", note: "dry, about 3/4 cup cooked" },
       { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "in place of sour cream" },
-      { item: "Salsa", qty: 3, unit: "tbsp" },
+      { item: "Ranch dressing", qty: 2, unit: "tbsp" },
       { item: "Taco seasoning", qty: 0, unit: "", note: "2 tsp" },
       { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
     ],
@@ -206,11 +233,35 @@ const MEALS = [
       "Brown the turkey on medium-high 8 to 10 minutes, breaking it up. Or reheat a serving of the batch taco turkey.",
       "Stir in taco seasoning, 2 tbsp water, and the beans. Cook 2 minutes.",
       "Reheat or cook the rice.",
-      "Bowl: rice, then turkey and beans. Top with cottage cheese and salsa.",
+      "Bowl: rice, then turkey and beans. Top with cottage cheese and ranch.",
     ],
-    macros: { protein: 54, carbs: 64, fat: 19, fiber: 8, calories: 650 },
-    cost: 2.76,
+    macros: { protein: 54, carbs: 63, fat: 33, fiber: 8, calories: 765 },
+    cost: 2.78,
     notes: "Lower carb: skip the rice and double the beans."
+  },
+  {
+    id: "chicken-rice-eggs",
+    name: "Chicken, Rice, and Eggs",
+    emoji: "🥘",
+    category: "lunch",
+    servings: 1,
+    time: "10 min",
+    ingredients: [
+      { item: "Chicken breast", qty: 6, unit: "oz", note: "raw weight, about 130 g cooked" },
+      { item: "White basmati rice", qty: 0.33, unit: "cup", note: "dry, about 1 cup cooked" },
+      { item: "Eggs", qty: 2, unit: "each" },
+      { item: "Olive oil", qty: 1, unit: "tsp" },
+      { item: "Ranch dressing", qty: 2, unit: "tbsp" },
+      { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
+    ],
+    steps: [
+      "Reheat batch chicken and rice 1:30 in the microwave. No batch: cook the rice and pan-cook the chicken 6 to 7 minutes a side.",
+      "Fry the 2 eggs in oil on medium, 2 to 3 minutes.",
+      "Bowl: rice, chicken, eggs on top.",
+      "Season. Ranch over it.",
+    ],
+    macros: { protein: 54, carbs: 51, fat: 32, fiber: 1, calories: 700 },
+    cost: 1.73
   },
   {
     id: "chicken-ranch-wraps",
@@ -224,7 +275,7 @@ const MEALS = [
       { item: "Chicken breast", qty: 6, unit: "oz", note: "raw weight, batch chicken sliced" },
       { item: "Shredded cheese", qty: 0.25, unit: "cup" },
       { item: "Carrots", qty: 1, unit: "each", note: "shredded or thin sticks" },
-      { item: "Homemade ranch", qty: 3, unit: "tbsp" },
+      { item: "Ranch dressing", qty: 3, unit: "tbsp" },
     ],
     steps: [
       "Warm the tortillas 15 seconds in the microwave so they fold without cracking.",
@@ -232,8 +283,8 @@ const MEALS = [
       "Add sliced chicken, cheese, and carrot.",
       "Roll tight. Eat cold, or toast seam-side down in a dry pan 1 minute a side.",
     ],
-    macros: { protein: 59, carbs: 49, fat: 20, fiber: 32, calories: 500 },
-    cost: 2.47,
+    macros: { protein: 56, carbs: 48, fat: 40, fiber: 32, calories: 650 },
+    cost: 2.44,
     notes: "Fastest lunch in the app if the batch chicken is made."
   },
   {
@@ -248,7 +299,7 @@ const MEALS = [
       { item: "Potatoes", qty: 1, unit: "each", note: "medium" },
       { item: "Broccoli, fresh", qty: 2, unit: "cup" },
       { item: "Olive oil", qty: 1, unit: "tsp" },
-      { item: "Homemade ranch", qty: 3, unit: "tbsp" },
+      { item: "Ranch dressing", qty: 3, unit: "tbsp" },
       { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
     ],
     steps: [
@@ -258,8 +309,8 @@ const MEALS = [
       "Split the potato. Drizzle oil on the broccoli. Season everything.",
       "Ranch over the potato and chicken.",
     ],
-    macros: { protein: 63, carbs: 53, fat: 11, fiber: 9, calories: 550 },
-    cost: 2.62
+    macros: { protein: 60, carbs: 52, fat: 31, fiber: 9, calories: 700 },
+    cost: 2.59
   },
   {
     id: "turkey-noodle-bowl",
@@ -297,7 +348,7 @@ const MEALS = [
       { item: "Potatoes", qty: 1, unit: "each", note: "medium, diced small" },
       { item: "Broccoli, fresh", qty: 2, unit: "cup" },
       { item: "Olive oil", qty: 2, unit: "tsp" },
-      { item: "Homemade ranch", qty: 2, unit: "tbsp" },
+      { item: "Ranch dressing", qty: 2, unit: "tbsp" },
       { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
     ],
     steps: [
@@ -307,8 +358,8 @@ const MEALS = [
       "Add broccoli and 2 tbsp water. Cover 3 minutes.",
       "Season hard with garlic powder, salt, and pepper. Ranch on top.",
     ],
-    macros: { protein: 49, carbs: 53, fat: 25, fiber: 9, calories: 630 },
-    cost: 3.36,
+    macros: { protein: 47, carbs: 52, fat: 38, fiber: 9, calories: 730 },
+    cost: 3.34,
     notes: "Rare beef night: swap the turkey for 85/15 ground beef (about +100 calories, +10 g fat)."
   },
   {
@@ -383,17 +434,17 @@ const MEALS = [
     servings: 1,
     time: "2 min (eggs boiled ahead)",
     ingredients: [
-      { item: "Eggs", qty: 3, unit: "each", note: "hard-boiled" },
+      { item: "Eggs", qty: 4, unit: "each", note: "hard-boiled" },
       { item: "Bananas", qty: 1, unit: "each" },
       { item: "Almonds", qty: 1, unit: "oz", note: "about 23" },
     ],
     steps: [
       "Boil a dozen eggs ahead: cover with cold water, bring to a boil, lid on, heat off, 11 minutes, then ice water.",
-      "Peel 3 eggs. Salt them.",
+      "Peel 4 eggs. Salt them.",
       "Eat with the banana and almonds.",
     ],
-    macros: { protein: 25, carbs: 35, fat: 29, fiber: 7, calories: 480 },
-    cost: 1.22
+    macros: { protein: 31, carbs: 35, fat: 34, fiber: 7, calories: 550 },
+    cost: 1.45
   },
   {
     id: "bean-quesadilla",
@@ -406,16 +457,15 @@ const MEALS = [
       { item: "High-fiber tortillas", qty: 1, unit: "each" },
       { item: "Black beans, canned", qty: 0.5, unit: "cup", note: "drained, lightly mashed" },
       { item: "Shredded cheese", qty: 0.25, unit: "cup" },
-      { item: "Salsa", qty: 2, unit: "tbsp" },
-      { item: "Homemade ranch", qty: 1, unit: "tbsp" },
+      { item: "Ranch dressing", qty: 1, unit: "tbsp" },
     ],
     steps: [
       "Mash the beans a little. Spread on half the tortilla. Add cheese. Fold.",
       "Dry pan on medium, 2 to 3 minutes a side.",
-      "Dip in salsa and ranch.",
+      "Dip in ranch.",
     ],
-    macros: { protein: 20, carbs: 43, fat: 13, fiber: 22, calories: 315 },
-    cost: 1.11,
+    macros: { protein: 19, carbs: 41, fat: 20, fiber: 22, calories: 355 },
+    cost: 1.02,
     notes: "The fiber fixer. Add this on any day the fiber bar is short."
   },
   {
@@ -459,32 +509,6 @@ const MEALS = [
     macros: { protein: 22, carbs: 50, fat: 12, fiber: 4, calories: 375 },
     cost: 2.67,
     notes: "Optional: 1 tbsp peanut butter adds about 95 calories, 4 g protein, 8 g fat. The scoop is counted at 10 g protein. Most of the protein here comes from the milk."
-  },
-  {
-    id: "fixed-ranch",
-    name: "Fixed Ranch (no mayo, not sour)",
-    emoji: "🥛",
-    category: "prep",
-    servings: 14,
-    servingNote: "2 tbsp",
-    time: "5 min + 30 min chill",
-    ingredients: [
-      { item: "Cottage cheese", qty: 1, unit: "cup" },
-      { item: "Plain Greek yogurt", qty: 0.5, unit: "cup" },
-      { item: "Whole milk", qty: 0.25, unit: "cup", note: "add a splash more to thin" },
-      { item: "Ranch seasoning packet", qty: 1, unit: "packet", note: "Great Value, 1 oz" },
-      { item: "Honey", qty: 1, unit: "tsp" },
-    ],
-    steps: [
-      "Put cottage cheese, Greek yogurt, milk, ranch packet, and honey in a blender.",
-      "Blend 30 to 45 seconds until completely smooth. Scrape the sides once.",
-      "Taste. Still tangy: add 1/2 tsp more honey. Too thick: add 1 tbsp milk.",
-      "Pour into a jar and chill at least 30 minutes. The dried herbs need that time and the flavor mellows.",
-      "Keeps about 7 days in the fridge. Shake before using.",
-    ],
-    macros: { protein: 3, carbs: 3, fat: 1, fiber: 0, calories: 30 },
-    cost: 0.16,
-    notes: "Why the last batch was sour: Greek yogurt was the whole base, and with no mayo there was no fat to round off the tang. This version swaps most of the yogurt for blended cottage cheese (much milder), uses whole milk, and adds a little honey to cancel the sour aftertaste. No blender: use 1 cup yogurt, 1/2 cup milk, 2 tbsp olive oil, 2 tsp honey, and whisk hard."
   },
   {
     id: "batch-chicken-rice",
@@ -576,14 +600,12 @@ const GROCERY = {
   "Almonds":                  { section: "Pantry",         unit: "oz",     price: 0.33 },
   "Pumpkin seeds":            { section: "Pantry",         unit: "tbsp",   price: 0.10 },
   "Olive oil":                { section: "Pantry",         unit: "tsp",    price: 0.05 },
-  "Salsa":                    { section: "Pantry",         unit: "tbsp",   price: 0.04 },
-  "Ranch seasoning packet":   { section: "Pantry",         unit: "packet", price: 0.60 },
   "Ground beef (85/15)":      { section: "Meat",           unit: "oz",     price: 0.37 },
   "Blueberries":              { section: "Frozen",         unit: "cup",    price: 0.75 },
   "Granola":                  { section: "Pantry",         unit: "cup",    price: 2.00, tip: "Purely Elizabeth or similar" },
   "Chocolate bone broth protein": { section: "Pantry",         unit: "scoop",  price: 1.50, tip: "your tub" },
+  "Ranch dressing":           { section: "Pantry",         unit: "tbsp",   price: 0.07, tip: "cheapest bottle, Great Value is fine" },
   "Honey":                    { section: "Pantry",         unit: "tsp",    price: 0.05 },
-  "Homemade ranch":           { section: "Make ahead",     unit: "tbsp",   price: 0.08, tip: "make the Fixed Ranch recipe" },
   "Salt, pepper, garlic powder": { section: "Pantry",         unit: "",       price: 0, staple: true },
   "Cinnamon":                 { section: "Pantry",         unit: "",       price: 0, staple: true },
   "Taco seasoning":           { section: "Pantry",         unit: "",       price: 0, staple: true },

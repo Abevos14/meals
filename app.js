@@ -5,7 +5,6 @@
   var view = document.getElementById("view");
   var titleEl = document.getElementById("title");
   var backBtn = document.getElementById("back");
-  var themeBtn = document.getElementById("theme");
 
   // ---------- storage (never crash if storage is blocked) ----------
   function load(key, fallback) {
@@ -13,21 +12,72 @@
   }
   function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
 
-  function todayKey() {
-    var d = new Date();
-    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  // ---------- dates ----------
+  var DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function dateKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function parseKey(k) { var p = String(k).split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+  function todayKey() { return dateKey(new Date()); }
+  function validKey(k) { return /^\d{4}-\d{2}-\d{2}$/.test(k || ""); }
+  function niceDate(k) { var d = parseKey(k); return DAY[d.getDay()] + " " + MON[d.getMonth()] + " " + d.getDate(); }
+  function weekStart(d) { return addDays(d, -((d.getDay() + 6) % 7)); }   // weeks start Monday
+  function weekOffsetOf(k) { return Math.round((weekStart(parseKey(k)) - weekStart(new Date())) / (7 * 864e5)); }
+
+  // ---------- the log: one entry per day, { "2026-11-16": { mealId: count } } ----------
+  function getLog() {
+    var log = load("meals-log-v1", null);
+    if (!log) {
+      log = {};
+      var old = load("meals-today-v1", null);   // carry over the old single-day log
+      if (old && old.date && old.items) {
+        var p = String(old.date).split("-");
+        if (p.length === 3) log[p[0] + "-" + pad(+p[1]) + "-" + pad(+p[2])] = old.items;
+      }
+      save("meals-log-v1", log);
+    }
+    return log;
   }
-  // Today resets itself each morning.
-  function getToday() {
-    var t = load("meals-today-v1", null);
-    if (!t || t.date !== todayKey()) t = { date: todayKey(), items: {} };
-    return t;
+  function getDay(k) { return getLog()[k] || {}; }
+  function setDay(k, items) {
+    var log = getLog();
+    if (Object.keys(items).length) log[k] = items; else delete log[k];
+    save("meals-log-v1", log);
   }
-  function setToday(t) { save("meals-today-v1", t); }
   function getPlan() { return load("meals-plan-v1", {}); }
   function setPlan(p) { save("meals-plan-v1", p); }
   function getGot() { return load("meals-got-v1", {}); }
   function setGot(g) { save("meals-got-v1", g); }
+
+  // ---------- targets (meals.js defaults, overridden in Settings) ----------
+  var TARGET_KEYS = ["proteinMin", "proteinMax", "fiber", "carbsMin", "carbsMax", "caloriesMin", "caloriesMax"];
+  function getTargets() {
+    var o = load("meals-targets-v1", {}) || {}, t = {};
+    TARGET_KEYS.forEach(function (k) {
+      var v = Number(o[k]);
+      t[k] = (o[k] != null && o[k] !== "" && isFinite(v) && v > 0) ? v : TARGETS[k];
+    });
+    return t;
+  }
+  function metrics(T) {
+    return [
+      { key: "protein",  label: "Protein",  unit: "g",   min: T.proteinMin,  max: T.proteinMax,  c: ["#06b6d4", "#2563eb"] },
+      { key: "fiber",    label: "Fiber",    unit: "g",   min: T.fiber,       max: null,          c: ["#2dd4bf", "#0d9488"] },
+      { key: "carbs",    label: "Carbs",    unit: "g",   min: T.carbsMin,    max: T.carbsMax,    c: ["#a78bfa", "#6366f1"] },
+      { key: "calories", label: "Calories", unit: "cal", min: T.caloriesMin, max: T.caloriesMax, c: ["#38bdf8", "#0284c7"] }
+    ];
+  }
+  function status(m, v) { if (v < m.min) return "under"; if (m.max && v > m.max) return "over"; return "hit"; }
+  function fmtNum(n) { return Math.round(n).toLocaleString("en-US"); }
+  function withUnit(m, n) { return fmtNum(n) + (m.unit === "g" ? " g" : " cal"); }
+  function goalText(m) { return m.max ? fmtNum(m.min) + " to " + withUnit(m, m.max) : withUnit(m, m.min); }
+  function noteText(m, v) {
+    var s = status(m, v);
+    if (s === "under") return withUnit(m, m.min - v) + " to go";
+    if (s === "over") return withUnit(m, v - m.max) + " over";
+    return "&#10003; " + (m.max ? "In range" : "Target hit");
+  }
 
   // ---------- helpers ----------
   function esc(s) {
@@ -48,7 +98,7 @@
     }
     return String(Math.round(q * 10) / 10);
   }
-  var PLURAL = { cup: "cups", slice: "slices", packet: "packets", can: "cans" };
+  var PLURAL = { cup: "cups", slice: "slices", packet: "packets", can: "cans", scoop: "scoops" };
   function fmtAmt(q, unit) {
     if (!q) return "";
     var u = unit === "each" ? "" : (q > 1 && PLURAL[unit] ? PLURAL[unit] : unit);
@@ -57,7 +107,7 @@
 
   function totals(items) {
     var t = { protein: 0, carbs: 0, fat: 0, fiber: 0, calories: 0, cost: 0, count: 0 };
-    Object.keys(items).forEach(function (id) {
+    Object.keys(items || {}).forEach(function (id) {
       var m = meal(id), n = items[id];
       if (!m || !n) return;
       t.protein += m.macros.protein * n; t.carbs += m.macros.carbs * n; t.fat += m.macros.fat * n;
@@ -66,54 +116,89 @@
     return t;
   }
 
+  // ---------- favorites ----------
+  function getFavs() {
+    var f = load("meals-fav-v1", null);
+    if (!Array.isArray(f)) f = (typeof DEFAULT_FAVORITES !== "undefined" ? DEFAULT_FAVORITES : []).slice();
+    return f.filter(function (id) { return !!meal(id); });
+  }
+  function isFav(id) { return getFavs().indexOf(id) >= 0; }
+  function toggleFav(id) {
+    var f = getFavs(), i = f.indexOf(id);
+    if (i >= 0) f.splice(i, 1); else f.push(id);
+    save("meals-fav-v1", f);
+  }
+
   // ---------- progress rings ----------
   var RING_C = 2 * Math.PI * 52;
-  var lastPct = { p: 0, f: 0 };
-  function ringHtml(key, label, val, pct, goal, note, hit) {
-    var from = lastPct[key] || 0;
-    lastPct[key] = pct;
-    return '<div class="ring' + (hit ? ' hit' : '') + '"><div class="rw"><svg viewBox="0 0 120 120" aria-hidden="true">' +
-      '<defs><linearGradient id="rg-' + key + '" x1="0" y1="0" x2="1" y2="1">' +
-      '<stop offset="0" stop-color="' + (key === "p" ? "#06b6d4" : "#2dd4bf") + '"/><stop offset="1" stop-color="' + (key === "p" ? "#2563eb" : "#0891b2") + '"/></linearGradient></defs>' +
+  var lastPct = {};
+  function ring(m, v, size) {
+    var st = status(m, v), pct = Math.min(100, (v / m.min) * 100);
+    var from = lastPct[size + m.key] || 0;
+    lastPct[size + m.key] = pct;
+    var id = "g-" + size + "-" + m.key, c = st === "over" ? ["#fbbf24", "#f97316"] : m.c;
+    return '<div class="ring ' + st + '"><div class="rw"><svg viewBox="0 0 120 120" aria-hidden="true">' +
+      '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + c[0] + '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient></defs>' +
       '<circle class="rt" cx="60" cy="60" r="52"/>' +
-      '<circle class="rp" cx="60" cy="60" r="52" stroke="url(#rg-' + key + ')" transform="rotate(-90 60 60)" stroke-dasharray="' + RING_C.toFixed(1) + '"' +
+      '<circle class="rp" cx="60" cy="60" r="52" stroke="url(#' + id + ')" transform="rotate(-90 60 60)" stroke-dasharray="' + RING_C.toFixed(1) + '"' +
       ' stroke-dashoffset="' + (RING_C * (1 - from / 100)).toFixed(1) + '" data-to="' + (RING_C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
-      '<div class="rc"><b>' + val + 'g</b><span>' + label + '</span></div></div>' +
-      '<div class="rg">' + goal + '</div><div class="rn">' + note + '</div></div>';
+      '<div class="rc"><b>' + fmtNum(v) + (m.unit === "g" ? "g" : "") + '</b>' + (size === "big" ? '<span>' + m.label + '</span>' : '') + '</div></div>' +
+      (size === "big" ? '<div class="rg">of ' + goalText(m) + '</div><div class="rn">' + noteText(m, v) + '</div>'
+                      : '<div class="rl">' + m.label + '</div>') + '</div>';
   }
-  function barsHtml(t) {
-    var pPct = Math.min(100, (t.protein / TARGETS.proteinMin) * 100);
-    var fPct = Math.min(100, (t.fiber / TARGETS.fiber) * 100);
-    var pHit = t.protein >= TARGETS.proteinMin, fHit = t.fiber >= TARGETS.fiber, pNote;
-    if (!pHit) pNote = (TARGETS.proteinMin - t.protein) + ' g to go';
-    else if (t.protein <= TARGETS.proteinMax) pNote = '&#10003; Target hit';
-    else pNote = '&#10003; Hit, ' + (t.protein - TARGETS.proteinMax) + ' g over';
-    return '<div class="rings">' +
-      ringHtml("p", "protein", t.protein, pPct, 'of ' + TARGETS.proteinMin + ' to ' + TARGETS.proteinMax + ' g', pNote, pHit) +
-      ringHtml("f", "fiber", t.fiber, fPct, 'of ' + TARGETS.fiber + ' g', fHit ? '&#10003; Target hit' : (TARGETS.fiber - t.fiber) + ' g to go', fHit) +
-      '</div>';
+  function ringsHtml(t, size) {
+    return '<div class="rings ' + size + '">' + metrics(getTargets()).map(function (m) { return ring(m, t[m.key], size); }).join("") + '</div>';
   }
 
-  function statsHtml(m) {
-    return '<div class="stats">' +
-      '<div class="stat hi"><b>' + m.macros.protein + 'g</b><span>protein</span></div>' +
-      '<div class="stat"><b>' + m.macros.fiber + 'g</b><span>fiber</span></div>' +
-      '<div class="stat"><b>' + m.macros.calories + '</b><span>cal</span></div>' +
-      '<div class="stat"><b>' + money(m.cost) + '</b><span>serving</span></div></div>';
-  }
-
+  // ---------- shared pieces ----------
+  var popId = null;
   function stepper(id, n, kind) {
     return '<div class="step">' +
       (n ? '<button data-act="' + kind + '-minus" data-id="' + esc(id) + '" aria-label="Remove one">&minus;</button><span class="q' + (popId === id ? ' pop' : '') + '">' + n + '</span>' : '') +
       '<button class="plus" data-act="' + kind + '-plus" data-id="' + esc(id) + '" aria-label="Add one">+</button></div>';
   }
-
-  var popId = null;
+  function rowHtml(m, n, kind, sub) {
+    return '<div class="row' + (n ? ' on' : '') + '"><span class="re">' + (m.emoji || '') + '</span>' +
+      '<a class="txt" href="#/meal/' + m.id + '"><b>' + esc(m.name) + '</b><small>' + sub(m) + '</small></a>' + stepper(m.id, n, kind) + '</div>';
+  }
+  function daySub(m) {
+    return m.macros.protein + 'g protein &middot; ' + m.macros.calories + ' cal<br>' + m.macros.carbs + 'g carbs &middot; ' + m.macros.fiber + 'g fiber';
+  }
+  // Favorites first, then each category (without repeating the favorites).
+  function pickerHtml(counts, kind, sub) {
+    var favs = getFavs(), html = "";
+    if (favs.length) {
+      html += '<h3 class="group-h">&#11088; Favorites</h3><div class="rows">' +
+        favs.map(function (id) { var m = meal(id); return rowHtml(m, counts[id] || 0, kind, sub); }).join("") + '</div>';
+    }
+    CATEGORIES.forEach(function (c) {
+      var list = MEALS.filter(function (m) { return m.category === c.id && favs.indexOf(m.id) < 0; });
+      if (!list.length) return;
+      html += '<h3 class="group-h">' + (c.emoji ? c.emoji + ' ' : '') + esc(c.name) + '</h3><div class="rows">' +
+        list.map(function (m) { return rowHtml(m, counts[m.id] || 0, kind, sub); }).join("") + '</div>';
+    });
+    return html;
+  }
+  function cardHtml(m) {
+    return '<a class="card" href="#/meal/' + m.id + '"><div class="head"><span class="bub">' + (m.emoji || '') + '</span>' +
+      '<div class="ht"><h3>' + esc(m.name) + (isFav(m.id) ? ' <span class="favmark">&#11088;</span>' : '') + '</h3>' +
+      '<div class="sub">' + esc(m.time) + (m.servings > 1 ? ' &middot; makes ' + m.servings : '') + '</div></div>' +
+      '<div class="pp"><b>' + m.macros.protein + 'g</b><span>protein</span></div></div>' +
+      '<div class="chips"><span>' + m.macros.carbs + 'g carbs</span><span>' + m.macros.fiber + 'g fiber</span><span>' + m.macros.calories + ' cal</span><span>' + money(m.cost) + '</span></div></a>';
+  }
 
   // ---------- screens ----------
+  var curDay = todayKey(), curWeek = 0, weekMetric = "protein";
+
   function screenHome() {
-    var t = totals(getToday().items);
-    var html = '<a class="today-card" href="#/today"><h2>Today</h2>' + barsHtml(t) + '</a><div class="grid">';
+    var items = getDay(todayKey()), t = totals(items);
+    var html = '<a class="today-card" href="#/today"><div class="card-top"><h2>Today</h2><span class="more">Open &#8250;</span></div>' + ringsHtml(t, "small") + '</a>';
+    var favs = getFavs();
+    if (favs.length) {
+      html += '<h3 class="group-h">&#11088; Favorites</h3><div class="rows">' +
+        favs.map(function (id) { return rowHtml(meal(id), items[id] || 0, "day", daySub); }).join("") + '</div>';
+    }
+    html += '<h3 class="group-h">Browse</h3><div class="grid">';
     CATEGORIES.forEach(function (c) {
       var n = MEALS.filter(function (m) { return m.category === c.id; }).length;
       html += '<a class="tile t-' + c.id + '" href="#/cat/' + c.id + '"><span class="em">' + (c.emoji || '') + '</span><b>' + esc(c.name) + '</b><span>' + n + (n === 1 ? ' meal' : ' meals') + '</span></a>';
@@ -127,11 +212,8 @@
     var c = cat(id);
     if (!c) return screenHome();
     var list = MEALS.filter(function (m) { return m.category === id; });
-    var html = '<p class="hint" style="margin:0 2px 12px">' + esc(c.hint) + '</p>';
-    list.forEach(function (m) {
-      html += '<a class="card" href="#/meal/' + m.id + '"><div class="head"><span class="bub">' + (m.emoji || '') + '</span><div><h3>' + esc(m.name) + '</h3>' +
-        '<div class="sub">' + esc(m.time) + (m.servings > 1 ? ' &middot; makes ' + m.servings : '') + '</div></div></div>' + statsHtml(m) + '</a>';
-    });
+    list.sort(function (a, b) { return (isFav(b.id) ? 1 : 0) - (isFav(a.id) ? 1 : 0); });
+    var html = '<p class="hint lead">' + esc(c.hint) + '</p>' + list.map(cardHtml).join("");
     if (!list.length) html += '<p class="empty">No meals here yet. Add one in meals.js.</p>';
     html += '<p class="est">Estimates, per serving.</p>';
     return { title: c.name, tab: "home", back: "#/", html: html };
@@ -140,19 +222,19 @@
   function screenMeal(id) {
     var m = meal(id);
     if (!m) return screenHome();
-    var c = cat(m.category), n = getToday().items[id] || 0, M = m.macros;
-    var html = '<div class="detail"><div class="hero"><span class="bub">' + (m.emoji || '') + '</span><h2>' + esc(m.name) + '</h2></div>' +
-      '<div class="meta">' + esc(m.time) + ' &middot; ' +
-      (m.servings > 1 ? 'makes ' + m.servings + ' servings' : '1 serving') +
-      ' &middot; ' + money(m.cost) + ' a serving</div>' +
+    var c = cat(m.category), n = getDay(todayKey())[id] || 0, M = m.macros, fav = isFav(id);
+    var html = '<div class="detail"><div class="hero"><span class="bub">' + (m.emoji || '') + '</span><h2>' + esc(m.name) + '</h2>' +
+      '<button class="star' + (fav ? ' on' : '') + '" data-act="fav" data-id="' + esc(id) + '" aria-label="' + (fav ? 'Remove from favorites' : 'Add to favorites') + '">' + (fav ? '&#9733;' : '&#9734;') + '</button></div>' +
+      '<div class="meta">' + esc(m.time) + ' &middot; ' + (m.servings > 1 ? 'makes ' + m.servings + ' servings' : '1 serving') + '</div>' +
       (m.servingNote ? '<div class="meta">One serving: ' + esc(m.servingNote) + '</div>' : '') +
 
-      '<div class="section"><h3>Macros per serving (estimate)</h3><div class="macros">' +
+      '<div class="section"><h3>Per serving (estimate)</h3><div class="macros">' +
         '<div class="stat hi"><b>' + M.protein + 'g</b><span>protein</span></div>' +
         '<div class="stat"><b>' + M.carbs + 'g</b><span>carbs</span></div>' +
         '<div class="stat"><b>' + M.fat + 'g</b><span>fat</span></div>' +
         '<div class="stat"><b>' + M.fiber + 'g</b><span>fiber</span></div>' +
-        '<div class="stat"><b>' + M.calories + '</b><span>cal</span></div></div></div>' +
+        '<div class="stat"><b>' + M.calories + '</b><span>calories</span></div>' +
+        '<div class="stat"><b>' + money(m.cost) + '</b><span>cost</span></div></div></div>' +
 
       '<div class="section"><h3>Ingredients' + (m.servings > 1 ? ' (whole batch)' : '') + '</h3><ul class="ing">';
     m.ingredients.forEach(function (g) {
@@ -163,43 +245,131 @@
     m.steps.forEach(function (s, i) { html += '<li><span class="n">' + (i + 1) + '</span><span>' + esc(s) + '</span></li>'; });
     html += '</ol></div>';
     if (m.notes) html += '<div class="section"><h3>Notes</h3><p class="note">' + esc(m.notes) + '</p></div>';
-    html += '<button class="btn sticky" data-act="today-plus" data-id="' + esc(m.id) + '">' +
+    html += '<button class="btn sticky" data-act="day-plus" data-id="' + esc(m.id) + '">' +
       (n ? 'Add another to Today (' + n + ' added)' : 'Add to Today') + '</button>' +
-      '<p class="est">Macros from typical labels, costs from typical Aldi and Sam\'s Club prices. Estimates only.</p></div>';
+      '<p class="est">Macros from typical labels, costs from typical Aldi, Walmart, and Sam\'s Club prices. Estimates only.</p></div>';
     return { title: c ? c.name : "Meal", tab: "home", back: "#/cat/" + m.category, html: html };
   }
 
-  function pickerHtml(counts, kind, sub) {
-    var html = "";
-    CATEGORIES.forEach(function (c) {
-      var list = MEALS.filter(function (m) { return m.category === c.id; });
-      if (!list.length) return;
-      html += '<h3 class="group-h">' + esc(c.name) + '</h3><div class="rows">';
-      list.forEach(function (m) {
-        var n = counts[m.id] || 0;
-        html += '<div class="row' + (n ? ' on' : '') + '"><span class="re">' + (m.emoji || '') + '</span><a class="txt" href="#/meal/' + m.id + '"><b>' + esc(m.name) + '</b><small>' + sub(m) + '</small></a>' +
-          stepper(m.id, n, kind) + '</div>';
-      });
-      html += '</div>';
+  // Meals that close the protein gap without going over carbs or calories.
+  function whatFits(t, T) {
+    var left = T.proteinMin - t.protein, roomC = T.carbsMax - t.carbs, roomK = T.caloriesMax - t.calories;
+    var list = MEALS.filter(function (m) {
+      return m.category !== "prep" && m.macros.protein >= 15 && m.macros.carbs <= roomC && m.macros.calories <= roomK;
     });
-    return html;
+    list.sort(function (a, b) {
+      return (Math.min(b.macros.protein, left) - Math.min(a.macros.protein, left)) || (b.macros.fiber - a.macros.fiber);
+    });
+    return list.slice(0, 3);
   }
 
-  function screenToday() {
-    var today = getToday(), t = totals(today.items);
-    var html = '<div class="today-card" style="margin-bottom:0;padding-bottom:16px">' + barsHtml(t) +
-      '<div class="mini">' +
-        '<div class="stat"><b>' + t.calories + '</b><span>cal</span></div>' +
-        '<div class="stat"><b>' + t.carbs + 'g</b><span>carbs</span></div>' +
-        '<div class="stat"><b>' + t.fat + 'g</b><span>fat</span></div>' +
-        '<div class="stat"><b>' + money(t.cost) + '</b><span>cost</span></div></div></div>';
-    html += '<p class="hint">' + (t.count ? t.count + (t.count === 1 ? ' serving' : ' servings') + ' logged. ' : 'Nothing logged yet. ') + 'Tap + on what you eat. Resets each morning.</p>';
-    html += pickerHtml(today.items, "today", function (m) {
-      return m.macros.protein + 'g protein &middot; ' + m.macros.fiber + 'g fiber &middot; ' + m.macros.calories + ' cal';
-    });
-    if (t.count) html += '<div style="margin-top:20px"><button class="btn ghost" data-act="today-clear">Clear today</button></div>';
+  function screenDay(k) {
+    var isToday = k === todayKey(), items = getDay(k), t = totals(items), T = getTargets();
+    var html = '<div class="today-card">' + ringsHtml(t, "big") +
+      '<div class="extra"><span>Fat <b>' + t.fat + 'g</b></span><span>Cost <b>' + money(t.cost) + '</b></span>' +
+      '<span><b>' + t.count + '</b> ' + (t.count === 1 ? 'serving' : 'servings') + '</span></div></div>';
+
+    var prevK = dateKey(addDays(parseKey(k), -1)), prevN = totals(getDay(prevK)).count;
+    if (!t.count && prevN) {
+      html += '<button class="btn soft" data-act="repeat">&#8635; Repeat ' + (isToday ? 'yesterday' : niceDate(prevK)) +
+        ' (' + prevN + (prevN === 1 ? ' serving' : ' servings') + ')</button>';
+    }
+    if (t.count && t.protein < T.proteinMin) {
+      var fits = whatFits(t, T);
+      if (fits.length) {
+        html += '<h3 class="group-h">&#128161; Fits what is left</h3><div class="rows">' +
+          fits.map(function (m) { return rowHtml(m, items[m.id] || 0, "day", daySub); }).join("") + '</div>';
+      }
+    }
+    html += '<p class="hint">' + (isToday ? 'Tap + on what you eat. Each day is saved, see the Week tab.' : 'You are editing ' + niceDate(k) + '.') + '</p>';
+    html += pickerHtml(items, "day", daySub);
+    if (t.count) html += '<div class="gap"><button class="btn ghost" data-act="day-clear">Clear this day</button></div>';
     html += '<p class="est">Totals are estimates.</p>';
-    return { title: "Today", tab: "today", html: html };
+    return { title: isToday ? "Today" : niceDate(k), tab: isToday ? "today" : "week", back: isToday ? null : "#/week/" + weekOffsetOf(k), html: html };
+  }
+
+  function proteinStreak(T) {
+    var d = new Date(), n = 0;
+    if (totals(getDay(dateKey(d))).protein < T.proteinMin) d = addDays(d, -1);   // today is still in progress
+    for (var i = 0; i < 730; i++) {
+      if (totals(getDay(dateKey(d))).protein >= T.proteinMin) { n++; d = addDays(d, -1); } else break;
+    }
+    return n;
+  }
+  function shortNum(m, v) { return m.key === "calories" && v >= 1000 ? (Math.round(v / 100) / 10) + "k" : String(v); }
+
+  function chartHtml(days, m, tk) {
+    var W = 350, H = 210, top = 24, bottom = 34, plot = H - top - bottom, step = W / 7, bw = 30;
+    var peak = Math.max.apply(null, days.map(function (d) { return d.t[m.key]; }));
+    var yMax = Math.max(m.max || m.min, peak) * 1.12;
+    function y(v) { return top + plot - (v / yMax) * plot; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + m.label + ' by day">' +
+      '<defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + m.c[0] + '"/><stop offset="1" stop-color="' + m.c[1] + '"/></linearGradient></defs>';
+    if (m.max) s += '<rect class="band" x="0" y="' + y(m.max).toFixed(1) + '" width="' + W + '" height="' + (y(m.min) - y(m.max)).toFixed(1) + '" rx="4"/>';
+    s += '<line class="goal" x1="0" x2="' + W + '" y1="' + y(m.min).toFixed(1) + '" y2="' + y(m.min).toFixed(1) + '"/>';
+    days.forEach(function (d, i) {
+      var cx = step * i + step / 2, v = d.t[m.key], st = status(m, v);
+      if (d.t.count) {
+        var by = y(v), bh = Math.max(4, top + plot - by);
+        s += '<rect class="bar b-' + st + '" x="' + (cx - bw / 2).toFixed(1) + '" y="' + (top + plot - bh).toFixed(1) + '" width="' + bw + '" height="' + bh.toFixed(1) + '" rx="8"' + (st === "hit" ? ' fill="url(#wg)"' : '') + '/>' +
+          '<text class="val" x="' + cx.toFixed(1) + '" y="' + (top + plot - bh - 6).toFixed(1) + '">' + shortNum(m, v) + '</text>';
+      } else {
+        s += '<rect class="bar b-none" x="' + (cx - bw / 2).toFixed(1) + '" y="' + (top + plot - 4) + '" width="' + bw + '" height="4" rx="2"/>';
+      }
+      s += '<text class="lab' + (d.k === tk ? ' now' : '') + '" x="' + cx.toFixed(1) + '" y="' + (H - 16) + '">' + DAY[d.d.getDay()].charAt(0) + '</text>' +
+        '<text class="lab2' + (d.k === tk ? ' now' : '') + '" x="' + cx.toFixed(1) + '" y="' + (H - 2) + '">' + d.d.getDate() + '</text>';
+    });
+    return s + '</svg>';
+  }
+
+  function screenWeek(off) {
+    var T = getTargets(), M = metrics(T), tk = todayKey(), start = addDays(weekStart(new Date()), off * 7), days = [], i;
+    for (i = 0; i < 7; i++) { var d = addDays(start, i), k = dateKey(d); days.push({ d: d, k: k, t: totals(getDay(k)), future: k > tk }); }
+    var m = M.filter(function (x) { return x.key === weekMetric; })[0] || M[0];
+    var end = days[6].d, logged = days.filter(function (x) { return x.t.count; });
+    var range = MON[start.getMonth()] + " " + start.getDate() + " to " + (end.getMonth() !== start.getMonth() ? MON[end.getMonth()] + " " : "") + end.getDate();
+
+    var html = '<div class="weeknav"><button class="icon-btn" data-act="week-prev" aria-label="Previous week">&#8249;</button>' +
+      '<div class="wk"><b>' + (off === 0 ? "This week" : off === -1 ? "Last week" : range) + '</b><small>' + (off >= -1 ? range : "") + '</small></div>' +
+      '<button class="icon-btn" data-act="week-next" aria-label="Next week"' + (off >= 0 ? ' disabled' : '') + '>&#8250;</button></div>';
+
+    html += '<div class="seg">' + M.map(function (x) {
+      return '<button data-act="metric" data-id="' + x.key + '"' + (x.key === m.key ? ' class="on"' : '') + '>' + x.label + '</button>';
+    }).join("") + '</div>';
+
+    html += '<div class="chart">' + chartHtml(days, m, tk) + '<p class="cap">Goal: ' + goalText(m) + ' a day</p></div>';
+
+    if (off === 0) {
+      var st = proteinStreak(T);
+      html += '<div class="streak"><span class="fire">&#128293;</span><div><b>' + st + (st === 1 ? ' day' : ' days') + '</b><small>protein streak</small></div></div>';
+    }
+
+    html += '<h3 class="group-h">Averages' + (logged.length ? ' over ' + logged.length + (logged.length === 1 ? ' logged day' : ' logged days') : '') + '</h3>';
+    if (logged.length) {
+      html += '<div class="wstats">' + M.map(function (x) {
+        var sum = 0, hits = 0;
+        logged.forEach(function (dd) { sum += dd.t[x.key]; if (status(x, dd.t[x.key]) === "hit") hits++; });
+        return '<div class="wstat"><span>' + x.label + '</span><b>' + fmtNum(sum / logged.length) + (x.unit === "g" ? "g" : "") + '</b>' +
+          '<small>on target ' + hits + ' of ' + logged.length + '</small></div>';
+      }).join("") + '</div>';
+    } else {
+      html += '<p class="empty">Nothing logged this week.</p>';
+    }
+
+    html += '<h3 class="group-h">Days</h3><div class="rows">';
+    days.forEach(function (dd) {
+      var inner = '<div class="dl' + (dd.k === tk ? ' now' : '') + '"><b>' + DAY[dd.d.getDay()] + '</b><span>' + dd.d.getDate() + '</span></div><div class="dv">';
+      if (dd.t.count) {
+        inner += M.map(function (x) {
+          return '<span class="pill ' + status(x, dd.t[x.key]) + '">' + (x.key === "calories" ? "Cal" : x.label.charAt(0)) + ' ' + shortNum(x, dd.t[x.key]) + '</span>';
+        }).join("");
+      } else inner += '<span class="none">' + (dd.future ? "Upcoming" : "Nothing logged") + '</span>';
+      inner += '</div>';
+      html += dd.future ? '<div class="dayrow off">' + inner + '</div>'
+                        : '<a class="dayrow" href="#/' + (dd.k === tk ? 'today' : 'day/' + dd.k) + '">' + inner + '<span class="chev">&#8250;</span></a>';
+    });
+    html += '</div><p class="hint">P protein, F fiber, C carbs. Green means on target. Tap a day to see or fix it. Swipe or use the arrows for other weeks. History is saved on this phone only.</p>';
+    return { title: "Week", tab: "week", html: html };
   }
 
   function buildList(plan) {
@@ -218,12 +388,12 @@
 
   function screenGrocery() {
     var plan = getPlan(), got = getGot(), items = buildList(plan), names = Object.keys(items);
-    var html = '<p class="hint" style="margin-top:0">Tap + for each time you will make a meal this week. Batch recipes count as the whole batch.</p>';
+    var html = '<p class="hint lead">Tap + for each time you will make a meal this week. Batch recipes count as the whole batch.</p>';
     html += pickerHtml(plan, "plan", function (m) {
       return (m.servings > 1 ? 'makes ' + m.servings + ' &middot; ' : '') + money(m.cost * m.servings) + (m.servings > 1 ? ' a batch' : ' each');
     });
 
-    html += '<h2 style="font-size:26px;font-weight:800;margin:30px 2px 0">Your list</h2>';
+    html += '<h2 class="big-h">Your list</h2>';
     if (!names.length) {
       html += '<p class="empty">Pick meals above and the list builds itself.</p>';
     } else {
@@ -250,19 +420,44 @@
       html += '<div class="total"><span>Rough total</span><b>' + money(total) + '</b></div>' +
         '<p class="hint">Estimate of the food you will use. The receipt runs higher when you buy full packages, and lower for what you already have. ' +
         'If you pick a batch and the meals that use it, the chicken or turkey gets counted twice.</p>' +
-        '<div style="margin-top:16px"><button class="btn ghost" data-act="plan-clear">Clear week</button></div>';
+        '<div class="gap"><button class="btn ghost" data-act="plan-clear">Clear week</button></div>';
     }
     return { title: "Grocery list", tab: "grocery", html: html };
   }
 
+  function screenSettings() {
+    var T = getTargets();
+    function inp(k) { return '<input type="number" inputmode="numeric" min="0" data-target="' + k + '" value="' + T[k] + '" aria-label="' + k + '">'; }
+    function line(label, a, b) {
+      return '<div class="frow"><span class="fl">' + label + '</span><span class="fi">' + inp(a) + (b ? '<i>to</i>' + inp(b) : '<i></i><span class="fpad">or more</span>') + '</span></div>';
+    }
+    var html = '<h3 class="group-h">Daily targets</h3><div class="rows">' +
+      line("Protein (g)", "proteinMin", "proteinMax") + line("Fiber (g)", "fiber") +
+      line("Carbs (g)", "carbsMin", "carbsMax") + line("Calories", "caloriesMin", "caloriesMax") + '</div>' +
+      '<p class="hint">Changes save as you type. The rings and the Week chart use these.</p>' +
+      '<div class="gap"><button class="btn ghost" data-act="targets-reset">Reset targets to defaults</button></div>' +
+      '<h3 class="group-h">Look</h3><div class="seg">' + ["auto", "light", "dark"].map(function (t) {
+        return '<button data-act="theme" data-id="' + t + '"' + (t === theme ? ' class="on"' : '') + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</button>';
+      }).join("") + '</div>' +
+      '<h3 class="group-h">Good to know</h3><p class="note">Tap the star on any meal to pin it to the top as a favorite. ' +
+      'Your log, favorites, and targets are saved on this phone only. Deleting the app from your home screen erases them.</p>';
+    return { title: "Settings", tab: "", back: "#/", html: html };
+  }
+
   // ---------- router ----------
+  var route = "";
   function render(keepScroll) {
-    var hash = location.hash.replace(/^#\/?/, ""), parts = hash.split("/"), s;
-    if (parts[0] === "cat") s = screenCat(parts[1]);
-    else if (parts[0] === "meal") s = screenMeal(decodeURIComponent(parts[1] || ""));
-    else if (parts[0] === "today") s = screenToday();
-    else if (parts[0] === "grocery") s = screenGrocery();
-    else s = screenHome();
+    var parts = location.hash.replace(/^#\/?/, "").split("/"), s;
+    route = parts[0] || "home";
+    curDay = todayKey();
+    if (route === "cat") s = screenCat(parts[1]);
+    else if (route === "meal") s = screenMeal(decodeURIComponent(parts[1] || ""));
+    else if (route === "today") s = screenDay(curDay);
+    else if (route === "day" && validKey(parts[1]) && parts[1] <= curDay) { curDay = parts[1]; s = screenDay(curDay); }
+    else if (route === "week") { curWeek = Math.min(0, parseInt(parts[1], 10) || 0); s = screenWeek(curWeek); }
+    else if (route === "grocery") s = screenGrocery();
+    else if (route === "settings") s = screenSettings();
+    else { route = "home"; s = screenHome(); }
 
     var y = window.scrollY;
     view.innerHTML = s.html;
@@ -290,44 +485,73 @@
 
   view.addEventListener("click", function (e) {
     var el = e.target.closest("[data-act]");
-    if (!el) return;
-    var act = el.dataset.act, id = el.dataset.id, t, p, g;
-    if (act === "today-plus" || act === "today-minus") {
-      t = getToday(); bump(t.items, id, act === "today-plus" ? 1 : -1); setToday(t);
-    } else if (act === "today-clear") {
-      t = getToday(); t.items = {}; setToday(t);
+    if (!el || el.disabled) return;
+    var act = el.dataset.act, id = el.dataset.id, d, p, g;
+    if (act === "day-plus" || act === "day-minus") {
+      d = getDay(curDay); bump(d, id, act === "day-plus" ? 1 : -1); setDay(curDay, d);
+    } else if (act === "day-clear") {
+      setDay(curDay, {});
+    } else if (act === "repeat") {
+      setDay(curDay, JSON.parse(JSON.stringify(getDay(dateKey(addDays(parseKey(curDay), -1))))));
     } else if (act === "plan-plus" || act === "plan-minus") {
       p = getPlan(); bump(p, id, act === "plan-plus" ? 1 : -1); setPlan(p);
     } else if (act === "plan-clear") {
       setPlan({}); setGot({});
     } else if (act === "got") {
       g = getGot(); if (g[id]) delete g[id]; else g[id] = true; setGot(g);
+    } else if (act === "fav") {
+      toggleFav(id);
+    } else if (act === "metric") {
+      weekMetric = id;
+    } else if (act === "week-prev" || act === "week-next") {
+      e.preventDefault();
+      location.hash = "#/week/" + Math.min(0, curWeek + (act === "week-prev" ? -1 : 1));
+      return;
+    } else if (act === "theme") {
+      theme = id; try { localStorage.setItem("meals-theme", theme); } catch (err) {}
+      applyTheme(theme);
+    } else if (act === "targets-reset") {
+      save("meals-targets-v1", {});
     } else return;
     if (act.indexOf("-plus") > 0 || act.indexOf("-minus") > 0) popId = id;
     e.preventDefault();
     render(true);
   });
 
+  // Settings inputs save as you type (no re-render, so the keyboard stays up).
+  view.addEventListener("input", function (e) {
+    var k = e.target && e.target.dataset ? e.target.dataset.target : null;
+    if (!k) return;
+    var o = load("meals-targets-v1", {}) || {}, v = Number(e.target.value);
+    if (e.target.value !== "" && isFinite(v) && v > 0) o[k] = v; else delete o[k];
+    save("meals-targets-v1", o);
+  });
+
+  // Swipe left and right on the Week screen to change weeks.
+  var sx = null, sy = null;
+  view.addEventListener("touchstart", function (e) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  view.addEventListener("touchend", function (e) {
+    if (route !== "week" || sx === null) return;
+    var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    sx = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    var next = Math.min(0, curWeek + (dx > 0 ? -1 : 1));
+    if (next !== curWeek) location.hash = "#/week/" + next;
+  }, { passive: true });
+
   backBtn.addEventListener("click", function () { location.hash = backBtn.dataset.to || "#/"; });
 
-  // ---------- theme: Auto -> Light -> Dark ----------
-  var THEMES = ["auto", "light", "dark"];
+  // ---------- theme ----------
   function applyTheme(t) {
     if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
-    themeBtn.textContent = t.charAt(0).toUpperCase() + t.slice(1);
   }
   var theme = "auto";
   try { theme = localStorage.getItem("meals-theme") || "auto"; } catch (e) {}
-  if (THEMES.indexOf(theme) < 0) theme = "auto";
+  if (["auto", "light", "dark"].indexOf(theme) < 0) theme = "auto";
   applyTheme(theme);
-  themeBtn.addEventListener("click", function () {
-    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
-    try { localStorage.setItem("meals-theme", theme); } catch (e) {}
-    applyTheme(theme);
-  });
 
   window.addEventListener("hashchange", function () { render(false); });
-  // Coming back to the app the next morning: refresh so Today resets.
+  // Coming back to the app the next morning: refresh so Today moves to the new day.
   document.addEventListener("visibilitychange", function () { if (!document.hidden) render(true); });
   render(false);
 

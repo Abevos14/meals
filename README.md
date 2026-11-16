@@ -27,7 +27,12 @@ Live: https://abevos14.github.io/meals/
 Macros come from typical nutrition labels. Costs come from typical Aldi and Sam's Club prices.
 Check your own packages, especially the protein noodles, and fix the numbers in `meals.js`.
 
+## Targets and favorites
+
+Default daily targets and default starred meals are at the top of `meals.js`.
+You can also change targets in the app (gear button) and star meals by tapping the star on a meal.
+
 ## Data on the phone
 
-Today's log, the weekly plan, and the theme are saved on the phone only (localStorage).
-Today resets itself each morning.
+Each day's log, favorites, targets, the weekly grocery plan, and the theme are saved on the phone only (localStorage).
+Deleting the app from the home screen erases them.

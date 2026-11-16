@@ -1,7 +1,7 @@
 // Offline cache for the Meals app.
-// EVERY time you change any file: bump the number below (meals-v2 -> meals-v2), then commit and push.
+// EVERY time you change any file: bump the number below (meals-v3 -> meals-v2), then commit and push.
 // If you add a new file, add it to ASSETS too.
-const CACHE = "meals-v2";
+const CACHE = "meals-v3";
 
 const ASSETS = [
   "./",
