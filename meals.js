@@ -5,6 +5,7 @@
    TO ADD A MEAL: copy one meal block below, paste it, and change:
      id          unique, lowercase, no spaces (example: "egg-tacos")
      name        what shows on the card
+     emoji       one emoji shown next to the name
      category    one of: "breakfast" "lunch" "dinner" "small" "prep"
      servings    how many servings the ingredient list makes
      time        cook time text
@@ -28,17 +29,18 @@ const TARGETS = {
 };
 
 const CATEGORIES = [
-  { id: "breakfast", name: "Breakfast",  hint: "Before noon is fine" },
-  { id: "lunch",     name: "Lunch",      hint: "Big protein bowls" },
-  { id: "dinner",    name: "Dinner",     hint: "Meat, veg, potato" },
-  { id: "small",     name: "Small meal", hint: "The 4th, lighter meal" },
-  { id: "prep",      name: "Meal prep",  hint: "Batches and ranch" }
+  { id: "breakfast", name: "Breakfast", emoji: "🍳",  hint: "Before noon is fine" },
+  { id: "lunch",     name: "Lunch", emoji: "🥗",      hint: "Big protein bowls" },
+  { id: "dinner",    name: "Dinner", emoji: "🍗",     hint: "Meat, veg, potato" },
+  { id: "small",     name: "Small meal", emoji: "🥕", hint: "The 4th, lighter meal" },
+  { id: "prep",      name: "Meal prep", emoji: "🍱",  hint: "Batches and ranch" }
 ];
 
 const MEALS = [
   {
     id: "egg-scramble",
     name: "Egg and Cottage Cheese Scramble",
+    emoji: "🍳",
     category: "breakfast",
     servings: 1,
     time: "8 min",
@@ -63,7 +65,8 @@ const MEALS = [
   },
   {
     id: "pb-oatmeal",
-    name: "PB Date Microwave Oatmeal",
+    name: "PB Microwave Oatmeal",
+    emoji: "🥣",
     category: "breakfast",
     servings: 1,
     time: "6 min",
@@ -71,7 +74,6 @@ const MEALS = [
       { item: "Rolled oats", qty: 1, unit: "cup" },
       { item: "Whole milk", qty: 1.5, unit: "cup", note: "not 2 cups" },
       { item: "Peanut butter", qty: 1, unit: "tbsp" },
-      { item: "Deglet Noor dates", qty: 3, unit: "each", note: "chopped" },
       { item: "Cinnamon", qty: 0, unit: "", note: "1/2 tsp" },
       { item: "Sauerkraut", qty: 0.25, unit: "cup", note: "eat first, on the side" },
     ],
@@ -81,37 +83,62 @@ const MEALS = [
       "Microwave 2 minutes. Stir.",
       "Microwave 1 more minute. Stop early if it climbs to the rim.",
       "Rest 2 minutes. It thickens a lot as it sits.",
-      "Top with peanut butter and chopped dates.",
+      "Top with peanut butter.",
     ],
-    macros: { protein: 26, carbs: 92, fat: 26, fiber: 12, calories: 685 },
-    cost: 0.91,
+    macros: { protein: 26, carbs: 77, fat: 26, fiber: 10, calories: 625 },
+    cost: 0.70,
     notes: "Liquid is cut from 2 cups to 1 1/2 so it sets thick instead of soupy. Still too loose in your microwave: drop to 1 1/4 cups. Fewer carbs: use 1/2 cup oats and 3/4 cup milk. More protein: stir in 1/2 cup Greek yogurt after cooking (+12 g)."
   },
   {
     id: "yogurt-bowl",
-    name: "Greek Yogurt Berry Bowl",
+    name: "Greek Yogurt Bowl",
+    emoji: "🫐",
     category: "breakfast",
     servings: 1,
     time: "3 min",
     ingredients: [
-      { item: "Plain Greek yogurt", qty: 1.5, unit: "cup" },
-      { item: "Frozen berries", qty: 1, unit: "cup" },
-      { item: "Pumpkin seeds", qty: 2, unit: "tbsp" },
-      { item: "Almonds", qty: 1, unit: "oz", note: "about 23" },
-      { item: "Deglet Noor dates", qty: 2, unit: "each", note: "chopped" },
+      { item: "Plain Greek yogurt", qty: 1, unit: "cup", note: "1 serving" },
+      { item: "Blueberries", qty: 1, unit: "cup" },
+      { item: "Granola", qty: 0.25, unit: "cup" },
+      { item: "Pumpkin seeds", qty: 3, unit: "tbsp", note: "1 serving, about 1 oz" },
+      { item: "Honey", qty: 3, unit: "tsp", note: "1 tbsp" },
       { item: "Sauerkraut", qty: 0.25, unit: "cup", note: "eat first, on the side" },
     ],
     steps: [
-      "Microwave the frozen berries 45 seconds so they thaw and make their own syrup.",
-      "Put yogurt in a bowl. Pour berries over it.",
-      "Top with pumpkin seeds, almonds, and dates.",
+      "Yogurt in the bowl.",
+      "Add the blueberries. Frozen: microwave 45 seconds first.",
+      "Top with granola, pumpkin seeds, and honey.",
     ],
-    macros: { protein: 47, carbs: 50, fat: 22, fiber: 11, calories: 565 },
-    cost: 3.10
+    macros: { protein: 34, carbs: 66, fat: 17, fiber: 8, calories: 535 },
+    cost: 2.87
+  },
+  {
+    id: "eggs-sourdough",
+    name: "Eggs on Sourdough",
+    emoji: "🍞",
+    category: "breakfast",
+    servings: 1,
+    time: "6 min",
+    ingredients: [
+      { item: "Eggs", qty: 4, unit: "each" },
+      { item: "Sourdough bread", qty: 2, unit: "slice" },
+      { item: "Olive oil", qty: 1, unit: "tsp" },
+      { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
+    ],
+    steps: [
+      "Heat oil in a pan on medium.",
+      "Fry or scramble the 4 eggs, 2 to 3 minutes.",
+      "Toast the sourdough.",
+      "Eggs on the toast. Season.",
+    ],
+    macros: { protein: 32, carbs: 50, fat: 26, fiber: 2, calories: 560 },
+    cost: 1.47,
+    notes: "Almost no fiber. Add carrots or berries on the side on days the fiber ring is short."
   },
   {
     id: "favorite-bowl",
     name: "The Favorite Bowl",
+    emoji: "🍚",
     category: "lunch",
     servings: 1,
     time: "12 min",
@@ -119,7 +146,7 @@ const MEALS = [
       { item: "Chicken breast", qty: 6, unit: "oz", note: "raw weight, about 130 g cooked" },
       { item: "White basmati rice", qty: 0.25, unit: "cup", note: "dry, about 3/4 cup cooked" },
       { item: "Protein noodles", qty: 2, unit: "oz", note: "dry" },
-      { item: "Cottage cheese", qty: 1, unit: "cup" },
+      { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "1 serving" },
       { item: "Broccoli, fresh", qty: 1, unit: "cup" },
       { item: "Homemade ranch", qty: 2, unit: "tbsp" },
       { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
@@ -130,13 +157,14 @@ const MEALS = [
       "Bowl: rice and noodles on the bottom, then chicken and broccoli.",
       "Cottage cheese on top. Season. Finish with ranch.",
     ],
-    macros: { protein: 86, carbs: 90, fat: 17, fiber: 8, calories: 810 },
-    cost: 3.11,
+    macros: { protein: 73, carbs: 85, fat: 12, fiber: 8, calories: 700 },
+    cost: 2.61,
     notes: "Chicken, rice, protein noodles, and cottage cheese in one bowl. Lower carb: skip the rice, keep the noodles."
   },
   {
     id: "chicken-quesadilla",
     name: "Chicken and Bean Quesadillas",
+    emoji: "🧀",
     category: "lunch",
     servings: 1,
     time: "10 min",
@@ -161,6 +189,7 @@ const MEALS = [
   {
     id: "turkey-taco-bowl",
     name: "Turkey Taco Bowl",
+    emoji: "🌮",
     category: "lunch",
     servings: 1,
     time: "15 min",
@@ -184,8 +213,33 @@ const MEALS = [
     notes: "Lower carb: skip the rice and double the beans."
   },
   {
+    id: "chicken-ranch-wraps",
+    name: "Chicken Ranch Wraps",
+    emoji: "🌯",
+    category: "lunch",
+    servings: 1,
+    time: "5 min",
+    ingredients: [
+      { item: "High-fiber tortillas", qty: 2, unit: "each" },
+      { item: "Chicken breast", qty: 6, unit: "oz", note: "raw weight, batch chicken sliced" },
+      { item: "Shredded cheese", qty: 0.25, unit: "cup" },
+      { item: "Carrots", qty: 1, unit: "each", note: "shredded or thin sticks" },
+      { item: "Homemade ranch", qty: 3, unit: "tbsp" },
+    ],
+    steps: [
+      "Warm the tortillas 15 seconds in the microwave so they fold without cracking.",
+      "Spread ranch down the middle.",
+      "Add sliced chicken, cheese, and carrot.",
+      "Roll tight. Eat cold, or toast seam-side down in a dry pan 1 minute a side.",
+    ],
+    macros: { protein: 59, carbs: 49, fat: 20, fiber: 32, calories: 500 },
+    cost: 2.47,
+    notes: "Fastest lunch in the app if the batch chicken is made."
+  },
+  {
     id: "chicken-potato-broccoli",
     name: "Chicken, Potato, and Broccoli Plate",
+    emoji: "🥦",
     category: "dinner",
     servings: 1,
     time: "15 min",
@@ -210,13 +264,14 @@ const MEALS = [
   {
     id: "turkey-noodle-bowl",
     name: "Turkey Noodle Bowl",
+    emoji: "🍜",
     category: "dinner",
     servings: 1,
     time: "15 min",
     ingredients: [
       { item: "Ground turkey (93/7)", qty: 6, unit: "oz", note: "raw weight" },
       { item: "Protein noodles", qty: 2, unit: "oz", note: "dry" },
-      { item: "Cottage cheese", qty: 1, unit: "cup" },
+      { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "1 serving" },
       { item: "Broccoli, fresh", qty: 1.5, unit: "cup" },
       { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
     ],
@@ -226,12 +281,13 @@ const MEALS = [
       "Boil noodles per the box. Add broccoli for the last 3 minutes. Drain.",
       "Bowl: noodles and broccoli, turkey, cottage cheese on top. It melts into a sauce.",
     ],
-    macros: { protein: 75, carbs: 54, fat: 26, fiber: 9, calories: 710 },
-    cost: 3.90
+    macros: { protein: 63, carbs: 49, fat: 21, fiber: 9, calories: 600 },
+    cost: 3.40
   },
   {
     id: "liver-skillet",
     name: "Turkey and Liver Potato Skillet",
+    emoji: "🥔",
     category: "dinner",
     servings: 1,
     time: "20 min",
@@ -256,8 +312,32 @@ const MEALS = [
     notes: "Rare beef night: swap the turkey for 85/15 ground beef (about +100 calories, +10 g fat)."
   },
   {
+    id: "beef-cottage",
+    name: "Ground Beef and Cottage Cheese",
+    emoji: "🥩",
+    category: "dinner",
+    servings: 1,
+    time: "15 min",
+    ingredients: [
+      { item: "Ground beef (85/15)", qty: 6, unit: "oz", note: "raw weight" },
+      { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "1 serving" },
+      { item: "Broccoli, fresh", qty: 2, unit: "cup", note: "or swap for 1 potato" },
+      { item: "Salt, pepper, garlic powder", qty: 0, unit: "", note: "to taste" },
+    ],
+    steps: [
+      "Brown the beef in a pan on medium-high, 8 to 10 minutes, breaking it up.",
+      "Drain the fat. Season with salt, pepper, and garlic powder.",
+      "Broccoli in a covered bowl with 2 tbsp water, microwave 3 to 4 minutes.",
+      "Plate the beef with cottage cheese on top or on the side.",
+    ],
+    macros: { protein: 49, carbs: 17, fat: 31, fiber: 5, calories: 535 },
+    cost: 3.52,
+    notes: "Potato instead of broccoli: microwave 5 to 7 minutes. Adds about 105 calories and 25 g carbs, about the same fiber. Mix in 1 oz grated liver if you want it hidden here."
+  },
+  {
     id: "carrots-pb-sourdough",
     name: "Carrots, PB, Sourdough, and Milk",
+    emoji: "🥕",
     category: "small",
     servings: 1,
     time: "3 min",
@@ -278,11 +358,12 @@ const MEALS = [
   {
     id: "cottage-berry-bowl",
     name: "Cottage Cheese Berry Bowl",
+    emoji: "🍓",
     category: "small",
     servings: 1,
     time: "3 min",
     ingredients: [
-      { item: "Cottage cheese", qty: 1, unit: "cup" },
+      { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "1 serving" },
       { item: "Frozen berries", qty: 1, unit: "cup" },
       { item: "Pumpkin seeds", qty: 2, unit: "tbsp" },
     ],
@@ -291,12 +372,13 @@ const MEALS = [
       "Pour over the cottage cheese.",
       "Pumpkin seeds on top.",
     ],
-    macros: { protein: 31, carbs: 29, fat: 18, fiber: 5, calories: 380 },
-    cost: 1.95
+    macros: { protein: 18, carbs: 24, fat: 13, fiber: 5, calories: 270 },
+    cost: 1.45
   },
   {
     id: "eggs-banana-almonds",
     name: "Boiled Eggs, Banana, and Almonds",
+    emoji: "🍌",
     category: "small",
     servings: 1,
     time: "2 min (eggs boiled ahead)",
@@ -316,6 +398,7 @@ const MEALS = [
   {
     id: "bean-quesadilla",
     name: "Bean and Cheese Quesadilla",
+    emoji: "🫘",
     category: "small",
     servings: 1,
     time: "6 min",
@@ -336,8 +419,51 @@ const MEALS = [
     notes: "The fiber fixer. Add this on any day the fiber bar is short."
   },
   {
+    id: "cottage-toast",
+    name: "Cottage Cheese Toast",
+    emoji: "🍯",
+    category: "small",
+    servings: 1,
+    time: "3 min",
+    ingredients: [
+      { item: "Sourdough bread", qty: 2, unit: "slice" },
+      { item: "Cottage cheese", qty: 0.5, unit: "cup", note: "1 serving, split across both" },
+      { item: "Honey", qty: 3, unit: "tsp", note: "1 tbsp, drizzled" },
+    ],
+    steps: [
+      "Toast the sourdough.",
+      "Spread the cottage cheese across both slices.",
+      "Drizzle the honey.",
+    ],
+    macros: { protein: 21, carbs: 70, fat: 6, fiber: 2, calories: 410 },
+    cost: 1.15
+  },
+  {
+    id: "chocolate-smoothie",
+    name: "Chocolate Smoothie",
+    emoji: "🥤",
+    category: "small",
+    servings: 1,
+    time: "3 min",
+    ingredients: [
+      { item: "Whole milk", qty: 1.33, unit: "cup", note: "320 ml" },
+      { item: "Frozen berries", qty: 1, unit: "cup", note: "or 1 banana" },
+      { item: "Chocolate bone broth protein", qty: 1, unit: "scoop" },
+      { item: "Honey", qty: 3, unit: "tsp", note: "1 tbsp" },
+    ],
+    steps: [
+      "Milk in the blender first.",
+      "Add fruit, protein, and honey.",
+      "Blend 30 to 45 seconds.",
+    ],
+    macros: { protein: 22, carbs: 50, fat: 12, fiber: 4, calories: 375 },
+    cost: 2.67,
+    notes: "Optional: 1 tbsp peanut butter adds about 95 calories, 4 g protein, 8 g fat. The scoop is counted at 10 g protein. Most of the protein here comes from the milk."
+  },
+  {
     id: "fixed-ranch",
     name: "Fixed Ranch (no mayo, not sour)",
+    emoji: "🥛",
     category: "prep",
     servings: 14,
     servingNote: "2 tbsp",
@@ -363,6 +489,7 @@ const MEALS = [
   {
     id: "batch-chicken-rice",
     name: "Batch Chicken and Rice",
+    emoji: "🍗",
     category: "prep",
     servings: 6,
     servingNote: "about 170 g cooked chicken + 3/4 cup cooked rice",
@@ -388,6 +515,7 @@ const MEALS = [
   {
     id: "batch-turkey-liver",
     name: "Batch Taco Turkey with Hidden Liver",
+    emoji: "🦃",
     category: "prep",
     servings: 6,
     servingNote: "about 1 cup",
@@ -447,10 +575,13 @@ const GROCERY = {
   "Peanut butter":            { section: "Pantry",         unit: "tbsp",   price: 0.06 },
   "Almonds":                  { section: "Pantry",         unit: "oz",     price: 0.33 },
   "Pumpkin seeds":            { section: "Pantry",         unit: "tbsp",   price: 0.10 },
-  "Deglet Noor dates":        { section: "Pantry",         unit: "each",   price: 0.07 },
   "Olive oil":                { section: "Pantry",         unit: "tsp",    price: 0.05 },
   "Salsa":                    { section: "Pantry",         unit: "tbsp",   price: 0.04 },
   "Ranch seasoning packet":   { section: "Pantry",         unit: "packet", price: 0.60 },
+  "Ground beef (85/15)":      { section: "Meat",           unit: "oz",     price: 0.37 },
+  "Blueberries":              { section: "Frozen",         unit: "cup",    price: 0.75 },
+  "Granola":                  { section: "Pantry",         unit: "cup",    price: 2.00, tip: "Purely Elizabeth or similar" },
+  "Chocolate bone broth protein": { section: "Pantry",         unit: "scoop",  price: 1.50, tip: "your tub" },
   "Honey":                    { section: "Pantry",         unit: "tsp",    price: 0.05 },
   "Homemade ranch":           { section: "Make ahead",     unit: "tbsp",   price: 0.08, tip: "make the Fixed Ranch recipe" },
   "Salt, pepper, garlic powder": { section: "Pantry",         unit: "",       price: 0, staple: true },

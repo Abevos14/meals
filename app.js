@@ -66,24 +66,32 @@
     return t;
   }
 
+  // ---------- progress rings ----------
+  var RING_C = 2 * Math.PI * 52;
+  var lastPct = { p: 0, f: 0 };
+  function ringHtml(key, label, val, pct, goal, note, hit) {
+    var from = lastPct[key] || 0;
+    lastPct[key] = pct;
+    return '<div class="ring' + (hit ? ' hit' : '') + '"><div class="rw"><svg viewBox="0 0 120 120" aria-hidden="true">' +
+      '<defs><linearGradient id="rg-' + key + '" x1="0" y1="0" x2="1" y2="1">' +
+      '<stop offset="0" stop-color="' + (key === "p" ? "#06b6d4" : "#2dd4bf") + '"/><stop offset="1" stop-color="' + (key === "p" ? "#2563eb" : "#0891b2") + '"/></linearGradient></defs>' +
+      '<circle class="rt" cx="60" cy="60" r="52"/>' +
+      '<circle class="rp" cx="60" cy="60" r="52" stroke="url(#rg-' + key + ')" transform="rotate(-90 60 60)" stroke-dasharray="' + RING_C.toFixed(1) + '"' +
+      ' stroke-dashoffset="' + (RING_C * (1 - from / 100)).toFixed(1) + '" data-to="' + (RING_C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
+      '<div class="rc"><b>' + val + 'g</b><span>' + label + '</span></div></div>' +
+      '<div class="rg">' + goal + '</div><div class="rn">' + note + '</div></div>';
+  }
   function barsHtml(t) {
     var pPct = Math.min(100, (t.protein / TARGETS.proteinMin) * 100);
     var fPct = Math.min(100, (t.fiber / TARGETS.fiber) * 100);
-    var pNote, pHit = false, pOver = false;
-    if (t.protein < TARGETS.proteinMin) pNote = (TARGETS.proteinMin - t.protein) + " g to go";
-    else if (t.protein <= TARGETS.proteinMax) { pNote = "Target hit"; pHit = true; }
-    else { pNote = "Target hit, " + (t.protein - TARGETS.proteinMax) + " g over"; pHit = true; pOver = true; }
-    var fHit = t.fiber >= TARGETS.fiber;
-    var fNote = fHit ? "Target hit" : (TARGETS.fiber - t.fiber) + " g to go";
-    return '' +
-      '<div class="bar-row"><div class="bar-top"><span class="lab">Protein</span>' +
-        '<span class="val"><b>' + t.protein + '</b> / ' + TARGETS.proteinMin + ' to ' + TARGETS.proteinMax + ' g</span></div>' +
-        '<div class="bar' + (pOver ? ' over' : '') + '"><i style="width:' + pPct + '%"></i></div>' +
-        '<div class="bar-note' + (pHit ? ' hit' : '') + '">' + pNote + '</div></div>' +
-      '<div class="bar-row"><div class="bar-top"><span class="lab">Fiber</span>' +
-        '<span class="val"><b>' + t.fiber + '</b> / ' + TARGETS.fiber + ' g</span></div>' +
-        '<div class="bar"><i style="width:' + fPct + '%"></i></div>' +
-        '<div class="bar-note' + (fHit ? ' hit' : '') + '">' + fNote + '</div></div>';
+    var pHit = t.protein >= TARGETS.proteinMin, fHit = t.fiber >= TARGETS.fiber, pNote;
+    if (!pHit) pNote = (TARGETS.proteinMin - t.protein) + ' g to go';
+    else if (t.protein <= TARGETS.proteinMax) pNote = '&#10003; Target hit';
+    else pNote = '&#10003; Hit, ' + (t.protein - TARGETS.proteinMax) + ' g over';
+    return '<div class="rings">' +
+      ringHtml("p", "protein", t.protein, pPct, 'of ' + TARGETS.proteinMin + ' to ' + TARGETS.proteinMax + ' g', pNote, pHit) +
+      ringHtml("f", "fiber", t.fiber, fPct, 'of ' + TARGETS.fiber + ' g', fHit ? '&#10003; Target hit' : (TARGETS.fiber - t.fiber) + ' g to go', fHit) +
+      '</div>';
   }
 
   function statsHtml(m) {
@@ -96,9 +104,11 @@
 
   function stepper(id, n, kind) {
     return '<div class="step">' +
-      (n ? '<button data-act="' + kind + '-minus" data-id="' + esc(id) + '" aria-label="Remove one">&minus;</button><span class="q">' + n + '</span>' : '') +
+      (n ? '<button data-act="' + kind + '-minus" data-id="' + esc(id) + '" aria-label="Remove one">&minus;</button><span class="q' + (popId === id ? ' pop' : '') + '">' + n + '</span>' : '') +
       '<button class="plus" data-act="' + kind + '-plus" data-id="' + esc(id) + '" aria-label="Add one">+</button></div>';
   }
+
+  var popId = null;
 
   // ---------- screens ----------
   function screenHome() {
@@ -106,9 +116,9 @@
     var html = '<a class="today-card" href="#/today"><h2>Today</h2>' + barsHtml(t) + '</a><div class="grid">';
     CATEGORIES.forEach(function (c) {
       var n = MEALS.filter(function (m) { return m.category === c.id; }).length;
-      html += '<a class="tile" href="#/cat/' + c.id + '"><b>' + esc(c.name) + '</b><span>' + n + (n === 1 ? ' meal' : ' meals') + '</span></a>';
+      html += '<a class="tile t-' + c.id + '" href="#/cat/' + c.id + '"><span class="em">' + (c.emoji || '') + '</span><b>' + esc(c.name) + '</b><span>' + n + (n === 1 ? ' meal' : ' meals') + '</span></a>';
     });
-    html += '<a class="tile accent" href="#/grocery"><b>Grocery list</b><span>Plan the week</span></a></div>' +
+    html += '<a class="tile t-grocery" href="#/grocery"><span class="em">&#128722;</span><b>Grocery list</b><span>Plan the week</span></a></div>' +
       '<p class="est">All macros and costs are estimates.</p>';
     return { title: "Meals", tab: "home", html: html };
   }
@@ -119,8 +129,8 @@
     var list = MEALS.filter(function (m) { return m.category === id; });
     var html = '<p class="hint" style="margin:0 2px 12px">' + esc(c.hint) + '</p>';
     list.forEach(function (m) {
-      html += '<a class="card" href="#/meal/' + m.id + '"><h3>' + esc(m.name) + '</h3>' +
-        '<div class="sub">' + esc(m.time) + (m.servings > 1 ? ' &middot; makes ' + m.servings : '') + '</div>' + statsHtml(m) + '</a>';
+      html += '<a class="card" href="#/meal/' + m.id + '"><div class="head"><span class="bub">' + (m.emoji || '') + '</span><div><h3>' + esc(m.name) + '</h3>' +
+        '<div class="sub">' + esc(m.time) + (m.servings > 1 ? ' &middot; makes ' + m.servings : '') + '</div></div></div>' + statsHtml(m) + '</a>';
     });
     if (!list.length) html += '<p class="empty">No meals here yet. Add one in meals.js.</p>';
     html += '<p class="est">Estimates, per serving.</p>';
@@ -131,7 +141,7 @@
     var m = meal(id);
     if (!m) return screenHome();
     var c = cat(m.category), n = getToday().items[id] || 0, M = m.macros;
-    var html = '<div class="detail"><h2>' + esc(m.name) + '</h2>' +
+    var html = '<div class="detail"><div class="hero"><span class="bub">' + (m.emoji || '') + '</span><h2>' + esc(m.name) + '</h2></div>' +
       '<div class="meta">' + esc(m.time) + ' &middot; ' +
       (m.servings > 1 ? 'makes ' + m.servings + ' servings' : '1 serving') +
       ' &middot; ' + money(m.cost) + ' a serving</div>' +
@@ -167,7 +177,7 @@
       html += '<h3 class="group-h">' + esc(c.name) + '</h3><div class="rows">';
       list.forEach(function (m) {
         var n = counts[m.id] || 0;
-        html += '<div class="row' + (n ? ' on' : '') + '"><a class="txt" href="#/meal/' + m.id + '"><b>' + esc(m.name) + '</b><small>' + sub(m) + '</small></a>' +
+        html += '<div class="row' + (n ? ' on' : '') + '"><span class="re">' + (m.emoji || '') + '</span><a class="txt" href="#/meal/' + m.id + '"><b>' + esc(m.name) + '</b><small>' + sub(m) + '</small></a>' +
           stepper(m.id, n, kind) + '</div>';
       });
       html += '</div>';
@@ -177,7 +187,7 @@
 
   function screenToday() {
     var today = getToday(), t = totals(today.items);
-    var html = '<div class="today-card" style="margin-bottom:0">' + barsHtml(t) +
+    var html = '<div class="today-card" style="margin-bottom:0;padding-bottom:16px">' + barsHtml(t) +
       '<div class="mini">' +
         '<div class="stat"><b>' + t.calories + '</b><span>cal</span></div>' +
         '<div class="stat"><b>' + t.carbs + 'g</b><span>carbs</span></div>' +
@@ -263,6 +273,14 @@
       a.classList.toggle("on", a.dataset.tab === s.tab);
     });
     window.scrollTo(0, keepScroll ? y : 0);
+    view.classList.toggle("enter", !keepScroll);
+    popId = null;
+    // animate rings from their last value to the new one
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        Array.prototype.forEach.call(view.querySelectorAll(".rp"), function (c) { c.style.strokeDashoffset = c.dataset.to; });
+      });
+    });
   }
 
   function bump(obj, id, d) {
@@ -285,6 +303,7 @@
     } else if (act === "got") {
       g = getGot(); if (g[id]) delete g[id]; else g[id] = true; setGot(g);
     } else return;
+    if (act.indexOf("-plus") > 0 || act.indexOf("-minus") > 0) popId = id;
     e.preventDefault();
     render(true);
   });
