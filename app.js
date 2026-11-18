@@ -59,6 +59,13 @@
     r.unshift({ name: e.name, protein: e.protein, carbs: e.carbs, fat: e.fat, fiber: e.fiber, calories: e.calories });
     save("meals-quick-recent-v1", r.slice(0, 8));
   }
+  function getWorkAll() { return load("meals-workouts-v1", {}) || {}; }
+  function getWorkouts(k) { var w = getWorkAll()[k]; return Array.isArray(w) ? w : []; }
+  function setWorkouts(k, list) {
+    var all = getWorkAll();
+    if (list.length) all[k] = list; else delete all[k];
+    save("meals-workouts-v1", all);
+  }
   function getPlan() { return load("meals-plan-v1", {}); }
   function setPlan(p) { save("meals-plan-v1", p); }
   function getGot() { return load("meals-got-v1", {}); }
@@ -74,6 +81,37 @@
     });
     return t;
   }
+  // ---------- workouts ----------
+  // MET values (Compendium of Physical Activities, rounded). Net burn = (MET - 1) x kg x hours.
+  var WORK = {
+    lift:  { name: "Lift",       emoji: "&#127947;&#65039;", met: { easy: 3.5, moderate: 5,   hard: 6 } },
+    run:   { name: "Run",        emoji: "&#127939;",         met: { easy: 8,   moderate: 9.8, hard: 11.5 } },
+    hoops: { name: "Basketball", emoji: "&#127936;",         met: { easy: 6,   moderate: 6.5, hard: 8 } },
+    other: { name: "Cardio",     emoji: "&#128692;",         met: { easy: 5,   moderate: 7,   hard: 9 } }
+  };
+  var INTENSITY = ["easy", "moderate", "hard"];
+  function bodyKg() { var lb = Number(load("meals-weight-v1", 0)); return (isFinite(lb) && lb > 60 ? lb : 175) * 0.4536; }
+  function workBurn(w) {
+    if (w.watchCal > 0) return Math.round(w.watchCal);
+    var t = WORK[w.type] || WORK.other, met = t.met[w.intensity] || t.met.moderate;
+    return Math.round((met - 1) * bodyKg() * (w.minutes / 60));
+  }
+  // Half of the burn is added to the day's calorie target. Your base target already assumes an active
+  // person, and watch and formula burns both run high. Roughly half of that extra goes to carbs.
+  function workBonus(k) {
+    var burn = 0;
+    getWorkouts(k).forEach(function (w) { burn += workBurn(w); });
+    var cal = Math.round(burn * 0.5 / 10) * 10;
+    return { burn: burn, cal: cal, carbs: Math.round(cal * 0.5 / 4) };
+  }
+  function dayTargets(k) {
+    var T = getTargets(), b = workBonus(k), o = {};
+    Object.keys(T).forEach(function (x) { o[x] = T[x]; });
+    o.caloriesMin += b.cal; o.caloriesMax += b.cal; o.carbsMin += b.carbs; o.carbsMax += b.carbs;
+    o.bonus = b;
+    return o;
+  }
+
   function metrics(T) {
     return [
       { key: "protein",  label: "Protein",  unit: "g",   min: T.proteinMin,  max: T.proteinMax,  c: ["#06b6d4", "#2563eb"] },
@@ -169,8 +207,8 @@
       (size === "big" ? '<div class="rg">of ' + goalText(m) + '</div><div class="rn">' + noteText(m, v) + '</div>'
                       : '<div class="rl">' + m.label + '</div>') + '</div>';
   }
-  function ringsHtml(t, size) {
-    return '<div class="rings ' + size + '">' + metrics(getTargets()).map(function (m) { return ring(m, t[m.key], size); }).join("") + '</div>';
+  function ringsHtml(t, size, T) {
+    return '<div class="rings ' + size + '">' + metrics(T || getTargets()).map(function (m) { return ring(m, t[m.key], size); }).join("") + '</div>';
   }
 
   // ---------- shared pieces ----------
@@ -215,7 +253,7 @@
 
   function screenHome() {
     var items = getDay(todayKey()), t = dayTotals(todayKey());
-    var html = '<a class="today-card" href="#/today"><div class="card-top"><h2>Today</h2><span class="more">Open &#8250;</span></div>' + ringsHtml(t, "small") + '</a>';
+    var html = '<a class="today-card" href="#/today"><div class="card-top"><h2>Today</h2><span class="more">Open &#8250;</span></div>' + ringsHtml(t, "small", dayTargets(todayKey())) + '</a>';
     var favs = getFavs();
     if (favs.length) {
       html += '<h3 class="group-h">&#11088; Favorites</h3><div class="rows">' +
@@ -287,8 +325,9 @@
   }
 
   function screenDay(k) {
-    var isToday = k === todayKey(), items = getDay(k), t = dayTotals(k), T = getTargets();
-    var html = '<div class="today-card">' + ringsHtml(t, "big") +
+    var isToday = k === todayKey(), items = getDay(k), t = dayTotals(k), T = dayTargets(k);
+    var html = '<div class="today-card">' + ringsHtml(t, "big", T) +
+      (T.bonus.cal ? '<p class="bonus">&#128293; Workouts burned about ' + fmtNum(T.bonus.burn) + ' cal, so calories are up ' + fmtNum(T.bonus.cal) + ' and carbs up ' + T.bonus.carbs + ' g today.</p>' : '') +
       '<div class="extra"><span>Fat <b>' + t.fat + 'g</b></span><span>Cost <b>' + money(t.cost) + '</b></span>' +
       '<span><b>' + t.count + '</b> ' + (t.count === 1 ? 'serving' : 'servings') + '</span></div></div>';
 
@@ -297,8 +336,9 @@
       html += '<button class="btn soft" data-act="repeat">&#8635; Repeat ' + (isToday ? 'yesterday' : niceDate(prevK)) +
         ' (' + prevN + (prevN === 1 ? ' serving' : ' servings') + ')</button>';
     }
+    html += workoutHtml(k, t, T, items);
     html += quickHtml(k);
-    if (t.count && t.protein < T.proteinMin) {
+    if (t.count && t.protein < T.proteinMin && !getWorkouts(k).length) {
       var fits = whatFits(t, T);
       if (fits.length) {
         html += '<h3 class="group-h">&#128161; Fits what is left</h3><div class="rows">' +
@@ -311,6 +351,72 @@
     html += '<p class="est">Totals are estimates.</p>';
     return { title: isToday ? "Today" : niceDate(k), tab: isToday ? "today" : "week", back: isToday ? null : "#/week/" + weekOffsetOf(k), html: html };
   }
+
+  // ---------- workout block on Today ----------
+  var workOpen = false, wType = "lift", wInt = "moderate";
+  function workLine(w) {
+    return (w.minutes ? w.minutes + ' min &middot; ' : '') + w.intensity.charAt(0).toUpperCase() + w.intensity.slice(1) +
+      ' &middot; ~' + fmtNum(workBurn(w)) + ' cal' + (w.watchCal ? ' (watch)' : '');
+  }
+  // What to eat after the last workout logged today.
+  function postWorkout(k, t, T, items) {
+    var list = getWorkouts(k);
+    if (!list.length) return null;
+    var last = list[list.length - 1], cardio = last.type !== "lift", big = last.intensity === "hard" || last.minutes >= 60;
+    var roomC = T.carbsMax - t.carbs, roomK = T.caloriesMax - t.calories;
+    var cand = MEALS.filter(function (m) {
+      return m.category !== "prep" && m.macros.protein >= 20 && m.macros.calories <= Math.max(roomK, 400) && m.macros.carbs <= Math.max(roomC, 40);
+    });
+    function score(m) {
+      var P = m.macros.protein, C = m.macros.carbs, sc;
+      if (cardio) sc = Math.min(C, big ? 100 : 70) * 1.2 + Math.min(P, 50) * 1.0;
+      else sc = Math.min(P, 60) * 2 + Math.min(C, big ? 80 : 60) * 0.6;
+      if (m.macros.fat > 30) sc -= (m.macros.fat - 30) * 1.5;   // heavy fat slows things down after training
+      if (items[m.id]) sc -= 25;                                  // already eaten today, mix it up
+      return sc;
+    }
+    cand.sort(function (a, b) { return score(b) - score(a); });
+    var why = cardio
+      ? (big ? 'Long or hard cardio burns through stored carbs. Refill carbs first, with solid protein.' : 'Carbs to refill, protein to recover.')
+      : (big ? 'Hard lift: lots of protein for muscle repair, plus carbs to refuel.' : 'Protein first for muscle repair, some carbs to refuel.');
+    return { last: last, meals: cand.slice(0, 3), why: why + ' Best eaten within about 2 hours.' };
+  }
+  function workoutHtml(k, t, T, items) {
+    var list = getWorkouts(k), html = '';
+    if (list.length) {
+      html += '<h3 class="group-h">&#128170; Workouts</h3><div class="rows">' + list.map(function (w) {
+        var tp = WORK[w.type] || WORK.other;
+        return '<div class="row on"><span class="re">' + tp.emoji + '</span><div class="txt"><b>' + esc(w.label || tp.name) + '</b><small>' + workLine(w) + '</small></div>' +
+          '<button class="xbtn" data-act="work-del" data-id="' + esc(w.id) + '" aria-label="Remove workout">&times;</button></div>';
+      }).join("") + '</div>';
+      var pw = postWorkout(k, t, T, items);
+      if (pw && pw.meals.length) {
+        var tp2 = WORK[pw.last.type] || WORK.other;
+        html += '<div class="eatnext"><div class="en-h">' + tp2.emoji + ' <b>Eat after your ' + esc((pw.last.label || tp2.name).toLowerCase()) + '</b></div>' +
+          '<p>' + pw.why + '</p></div><div class="rows">' +
+          pw.meals.map(function (m) { return rowHtml(m, items[m.id] || 0, "day", daySub); }).join("") + '</div>';
+      }
+    }
+    if (!workOpen) {
+      return html + '<button class="btn soft" data-act="work-open">&#128170; Log a workout</button>';
+    }
+    html += '<div class="quick"><div class="qhead"><b>Log a workout</b><button type="button" class="xbtn" data-act="work-close" aria-label="Close">&times;</button></div>' +
+      '<div class="wtypes">' + Object.keys(WORK).map(function (key) {
+        return '<button type="button" data-act="work-type" data-id="' + key + '"' + (key === wType ? ' class="on"' : '') + '><i>' + WORK[key].emoji + '</i>' + WORK[key].name + '</button>';
+      }).join("") + '</div>' +
+      (wType === "lift" ? '<div class="seg mt">' + ["Upper", "Lower", "Full"].map(function (x) {
+        return '<button type="button" data-act="work-label" data-id="' + x + '"' + (x === wLabel ? ' class="on"' : '') + '>' + x + '</button>';
+      }).join("") + '</div>' : '') +
+      '<div class="seg mt">' + INTENSITY.map(function (x) {
+        return '<button type="button" data-act="work-int" data-id="' + x + '"' + (x === wInt ? ' class="on"' : '') + '>' + x.charAt(0).toUpperCase() + x.slice(1) + '</button>';
+      }).join("") + '</div>' +
+      '<div class="qgrid"><label class="qf"><span>Minutes</span><input id="w-min" type="number" inputmode="numeric" min="1" placeholder="' + (wType === "run" ? "40" : "60") + '"></label>' +
+      '<label class="qf"><span>Watch calories</span><input id="w-cal" type="number" inputmode="numeric" min="0" placeholder="optional"></label></div>' +
+      '<p class="qnote" id="w-msg">Burn is estimated from time, effort, and your weight (Settings). If your Garmin shows calories, put them in and that number is used instead.</p>' +
+      '<button type="button" class="btn" data-act="work-save">Save workout</button></div>';
+    return html;
+  }
+  var wLabel = "Upper";
 
   // ---------- quick add ----------
   var quickOpen = false;
@@ -359,6 +465,7 @@
 
   function proteinStreak(T) {
     var d = new Date(), n = 0;
+    // protein target does not change with workouts, so the base target is right here
     if (dayTotals(dateKey(d)).protein < T.proteinMin) d = addDays(d, -1);   // today is still in progress
     for (var i = 0; i < 730; i++) {
       if (dayTotals(dateKey(d)).protein >= T.proteinMin) { n++; d = addDays(d, -1); } else break;
@@ -377,7 +484,7 @@
     if (m.max) s += '<rect class="band" x="0" y="' + y(m.max).toFixed(1) + '" width="' + W + '" height="' + (y(m.min) - y(m.max)).toFixed(1) + '" rx="4"/>';
     s += '<line class="goal" x1="0" x2="' + W + '" y1="' + y(m.min).toFixed(1) + '" y2="' + y(m.min).toFixed(1) + '"/>';
     days.forEach(function (d, i) {
-      var cx = step * i + step / 2, v = d.t[m.key], st = status(m, v);
+      var cx = step * i + step / 2, v = d.t[m.key], dm = d.M ? d.M.filter(function (x) { return x.key === m.key; })[0] : m, st = status(dm, v);
       if (d.t.count) {
         var by = y(v), bh = Math.max(4, top + plot - by);
         s += '<rect class="bar b-' + st + '" x="' + (cx - bw / 2).toFixed(1) + '" y="' + (top + plot - bh).toFixed(1) + '" width="' + bw + '" height="' + bh.toFixed(1) + '" rx="8"' + (st === "hit" ? ' fill="url(#wg)"' : '') + '/>' +
@@ -393,7 +500,7 @@
 
   function screenWeek(off) {
     var T = getTargets(), M = metrics(T), tk = todayKey(), start = addDays(weekStart(new Date()), off * 7), days = [], i;
-    for (i = 0; i < 7; i++) { var d = addDays(start, i), k = dateKey(d); days.push({ d: d, k: k, t: dayTotals(k), future: k > tk }); }
+    for (i = 0; i < 7; i++) { var d = addDays(start, i), k = dateKey(d); days.push({ d: d, k: k, t: dayTotals(k), M: metrics(dayTargets(k)), w: getWorkouts(k), future: k > tk }); }
     var m = M.filter(function (x) { return x.key === weekMetric; })[0] || M[0];
     var end = days[6].d, logged = days.filter(function (x) { return x.t.count; });
     var range = MON[start.getMonth()] + " " + start.getDate() + " to " + (end.getMonth() !== start.getMonth() ? MON[end.getMonth()] + " " : "") + end.getDate();
@@ -408,16 +515,22 @@
 
     html += '<div class="chart">' + chartHtml(days, m, tk) + '<p class="cap">Goal: ' + goalText(m) + ' a day</p></div>';
 
+    var wcount = 0, wburn = 0;
+    days.forEach(function (dd) { dd.w.forEach(function (w) { wcount++; wburn += workBurn(w); }); });
     if (off === 0) {
       var st = proteinStreak(T);
       html += '<div class="streak"><span class="fire">&#128293;</span><div><b>' + st + (st === 1 ? ' day' : ' days') + '</b><small>protein streak</small></div></div>';
     }
 
+    if (wcount) html += '<div class="wsum">&#128170; <b>' + wcount + (wcount === 1 ? ' workout' : ' workouts') + '</b> this week &middot; about ' + fmtNum(wburn) + ' cal burned</div>';
     html += '<h3 class="group-h">Averages' + (logged.length ? ' over ' + logged.length + (logged.length === 1 ? ' logged day' : ' logged days') : '') + '</h3>';
     if (logged.length) {
       html += '<div class="wstats">' + M.map(function (x) {
         var sum = 0, hits = 0;
-        logged.forEach(function (dd) { sum += dd.t[x.key]; if (status(x, dd.t[x.key]) === "hit") hits++; });
+        logged.forEach(function (dd) {
+          var dx = dd.M.filter(function (y) { return y.key === x.key; })[0];
+          sum += dd.t[x.key]; if (status(dx, dd.t[x.key]) === "hit") hits++;
+        });
         return '<div class="wstat"><span>' + x.label + '</span><b>' + fmtNum(sum / logged.length) + (x.unit === "g" ? "g" : "") + '</b>' +
           '<small>on target ' + hits + ' of ' + logged.length + '</small></div>';
       }).join("") + '</div>';
@@ -429,10 +542,11 @@
     days.forEach(function (dd) {
       var inner = '<div class="dl' + (dd.k === tk ? ' now' : '') + '"><b>' + DAY[dd.d.getDay()] + '</b><span>' + dd.d.getDate() + '</span></div><div class="dv">';
       if (dd.t.count) {
-        inner += M.map(function (x) {
+        inner += dd.M.map(function (x) {
           return '<span class="pill ' + status(x, dd.t[x.key]) + '">' + (x.key === "calories" ? "Cal" : x.label.charAt(0)) + ' ' + shortNum(x, dd.t[x.key]) + '</span>';
         }).join("");
       } else inner += '<span class="none">' + (dd.future ? "Upcoming" : "Nothing logged") + '</span>';
+      if (dd.w.length) inner += '<span class="wk-ic">' + dd.w.map(function (w) { return (WORK[w.type] || WORK.other).emoji; }).join("") + '</span>';
       inner += '</div>';
       html += dd.future ? '<div class="dayrow off">' + inner + '</div>'
                         : '<a class="dayrow" href="#/' + (dd.k === tk ? 'today' : 'day/' + dd.k) + '">' + inner + '<span class="chev">&#8250;</span></a>';
@@ -503,13 +617,15 @@
     var html = '<h3 class="group-h">Daily targets</h3><div class="rows">' +
       line("Protein (g)", "proteinMin", "proteinMax") + line("Fiber (g)", "fiber") +
       line("Carbs (g)", "carbsMin", "carbsMax") + line("Calories", "caloriesMin", "caloriesMax") + '</div>' +
-      '<p class="hint">Changes save as you type. The rings and the Week chart use these.</p>' +
+      '<p class="hint">Changes save as you type. The rings and the Week chart use these. On workout days, calories and carbs go up automatically.</p>' +
+      '<h3 class="group-h">You</h3><div class="rows"><div class="frow"><span class="fl">Body weight (lb)</span><span class="fi">' +
+      '<input type="number" inputmode="numeric" min="60" data-weight="1" value="' + Math.round(bodyKg() / 0.4536) + '" aria-label="Body weight"><i></i><span class="fpad">for burn</span></span></div></div>' +
       '<div class="gap"><button class="btn ghost" data-act="targets-reset">Reset targets to defaults</button></div>' +
       '<h3 class="group-h">Look</h3><div class="seg">' + ["auto", "light", "dark"].map(function (t) {
         return '<button data-act="theme" data-id="' + t + '"' + (t === theme ? ' class="on"' : '') + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</button>';
       }).join("") + '</div>' +
       '<h3 class="group-h">Good to know</h3><p class="note">Tap the star on any meal to pin it to the top as a favorite. ' +
-      'Your log, quick adds, favorites, and targets are saved on this phone only. Deleting the app from your home screen erases them.</p>';
+      'Your log, quick adds, workouts, favorites, and targets are saved on this phone only. Deleting the app from your home screen erases them.</p>';
     return { title: "Settings", tab: "", back: "#/", html: html };
   }
 
@@ -559,7 +675,7 @@
     if (act === "day-plus" || act === "day-minus") {
       d = getDay(curDay); bump(d, id, act === "day-plus" ? 1 : -1); setDay(curDay, d);
     } else if (act === "day-clear") {
-      setDay(curDay, {}); setQuick(curDay, []);
+      setDay(curDay, {}); setQuick(curDay, []); setWorkouts(curDay, []);
     } else if (act === "repeat") {
       var pk = dateKey(addDays(parseKey(curDay), -1));
       setDay(curDay, JSON.parse(JSON.stringify(getDay(pk))));
@@ -570,8 +686,35 @@
       setPlan({}); setGot({});
     } else if (act === "got") {
       g = getGot(); if (g[id]) delete g[id]; else g[id] = true; setGot(g);
+    } else if (act === "work-open") {
+      workOpen = true; quickOpen = false;
+    } else if (act === "work-close") {
+      workOpen = false;
+    } else if (act === "work-type" || act === "work-int" || act === "work-label") {
+      var keep = { m: (document.getElementById("w-min") || {}).value, c: (document.getElementById("w-cal") || {}).value };
+      if (act === "work-type") wType = id; else if (act === "work-int") wInt = id; else wLabel = id;
+      e.preventDefault(); render(true);
+      if (keep.m) document.getElementById("w-min").value = keep.m;
+      if (keep.c) document.getElementById("w-cal").value = keep.c;
+      return;
+    } else if (act === "work-save") {
+      var mins = parseFloat((document.getElementById("w-min") || {}).value), wc = parseFloat((document.getElementById("w-cal") || {}).value);
+      mins = isFinite(mins) && mins > 0 ? Math.round(mins) : 0;
+      wc = isFinite(wc) && wc > 0 ? Math.round(wc) : 0;
+      if (!mins && !wc) {
+        var wm = document.getElementById("w-msg");
+        if (wm) { wm.textContent = "Enter the minutes, or the calories from your watch."; wm.classList.add("err"); }
+        return;
+      }
+      var wl = getWorkouts(curDay);
+      wl.push({ id: "w" + Date.now().toString(36), type: wType, label: wType === "lift" ? wLabel + " lift" : "", intensity: wInt, minutes: mins, watchCal: wc });
+      setWorkouts(curDay, wl);
+      workOpen = false;
+      if (document.activeElement) document.activeElement.blur();
+    } else if (act === "work-del") {
+      setWorkouts(curDay, getWorkouts(curDay).filter(function (x) { return x.id !== id; }));
     } else if (act === "quick-open") {
-      quickOpen = true;
+      quickOpen = true; workOpen = false;
       e.preventDefault(); render(true);
       var nm = document.getElementById("q-name"); if (nm) nm.focus();
       return;
@@ -623,6 +766,11 @@
 
   // Settings inputs save as you type (no re-render, so the keyboard stays up).
   view.addEventListener("input", function (e) {
+    if (e.target && e.target.dataset && e.target.dataset.weight) {
+      var lb = Number(e.target.value);
+      if (isFinite(lb) && lb > 60) save("meals-weight-v1", lb);
+      return;
+    }
     var k = e.target && e.target.dataset ? e.target.dataset.target : null;
     if (!k) return;
     var o = load("meals-targets-v1", {}) || {}, v = Number(e.target.value);
@@ -653,9 +801,9 @@
   if (["auto", "light", "dark"].indexOf(theme) < 0) theme = "auto";
   applyTheme(theme);
 
-  window.addEventListener("hashchange", function () { quickOpen = false; render(false); });
+  window.addEventListener("hashchange", function () { quickOpen = false; workOpen = false; render(false); });
   // Coming back to the app the next morning: refresh so Today moves to the new day.
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !quickOpen) render(true); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !quickOpen && !workOpen) render(true); });
   render(false);
 
   if ("serviceWorker" in navigator) {

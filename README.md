@@ -32,6 +32,12 @@ Check your own packages, especially the protein noodles, and fix the numbers in 
 Default daily targets and default starred meals are at the top of `meals.js`.
 You can also change targets in the app (gear button) and star meals by tapping the star on a meal.
 
+## Workouts
+
+Log a lift, run, basketball, or other cardio on Today. Burn is estimated from minutes, effort, and body weight (Settings),
+or taken from your watch calories if you enter them. Half the burn is added to that day's calorie target, and part of that to carbs.
+The app then suggests what to eat after the last workout you logged.
+
 ## Data on the phone
 
 Each day's log, favorites, targets, the weekly grocery plan, and the theme are saved on the phone only (localStorage).
