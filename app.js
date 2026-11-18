@@ -45,6 +45,20 @@
     if (Object.keys(items).length) log[k] = items; else delete log[k];
     save("meals-log-v1", log);
   }
+  function getQuickAll() { return load("meals-quick-v1", {}) || {}; }
+  function getQuick(k) { var q = getQuickAll()[k]; return Array.isArray(q) ? q : []; }
+  function setQuick(k, list) {
+    var all = getQuickAll();
+    if (list.length) all[k] = list; else delete all[k];
+    save("meals-quick-v1", all);
+  }
+  function getRecent() { var r = load("meals-quick-recent-v1", []); return Array.isArray(r) ? r : []; }
+  function rememberRecent(e) {
+    var sig = function (x) { return [x.name, x.protein, x.carbs, x.fat, x.fiber, x.calories].join("|"); };
+    var r = getRecent().filter(function (x) { return sig(x) !== sig(e); });
+    r.unshift({ name: e.name, protein: e.protein, carbs: e.carbs, fat: e.fat, fiber: e.fiber, calories: e.calories });
+    save("meals-quick-recent-v1", r.slice(0, 8));
+  }
   function getPlan() { return load("meals-plan-v1", {}); }
   function setPlan(p) { save("meals-plan-v1", p); }
   function getGot() { return load("meals-got-v1", {}); }
@@ -113,6 +127,15 @@
       t.protein += m.macros.protein * n; t.carbs += m.macros.carbs * n; t.fat += m.macros.fat * n;
       t.fiber += m.macros.fiber * n; t.calories += m.macros.calories * n; t.cost += m.cost * n; t.count += n;
     });
+    return t;
+  }
+
+  function dayTotals(k) {
+    var t = totals(getDay(k));
+    getQuick(k).forEach(function (e) {
+      t.protein += e.protein; t.carbs += e.carbs; t.fat += e.fat; t.fiber += e.fiber; t.calories += e.calories; t.count += 1;
+    });
+    ["protein", "carbs", "fat", "fiber", "calories"].forEach(function (x) { t[x] = Math.round(t[x]); });
     return t;
   }
 
@@ -191,7 +214,7 @@
   var curDay = todayKey(), curWeek = 0, weekMetric = "protein";
 
   function screenHome() {
-    var items = getDay(todayKey()), t = totals(items);
+    var items = getDay(todayKey()), t = dayTotals(todayKey());
     var html = '<a class="today-card" href="#/today"><div class="card-top"><h2>Today</h2><span class="more">Open &#8250;</span></div>' + ringsHtml(t, "small") + '</a>';
     var favs = getFavs();
     if (favs.length) {
@@ -264,16 +287,17 @@
   }
 
   function screenDay(k) {
-    var isToday = k === todayKey(), items = getDay(k), t = totals(items), T = getTargets();
+    var isToday = k === todayKey(), items = getDay(k), t = dayTotals(k), T = getTargets();
     var html = '<div class="today-card">' + ringsHtml(t, "big") +
       '<div class="extra"><span>Fat <b>' + t.fat + 'g</b></span><span>Cost <b>' + money(t.cost) + '</b></span>' +
       '<span><b>' + t.count + '</b> ' + (t.count === 1 ? 'serving' : 'servings') + '</span></div></div>';
 
-    var prevK = dateKey(addDays(parseKey(k), -1)), prevN = totals(getDay(prevK)).count;
+    var prevK = dateKey(addDays(parseKey(k), -1)), prevN = dayTotals(prevK).count;
     if (!t.count && prevN) {
       html += '<button class="btn soft" data-act="repeat">&#8635; Repeat ' + (isToday ? 'yesterday' : niceDate(prevK)) +
         ' (' + prevN + (prevN === 1 ? ' serving' : ' servings') + ')</button>';
     }
+    html += quickHtml(k);
     if (t.count && t.protein < T.proteinMin) {
       var fits = whatFits(t, T);
       if (fits.length) {
@@ -288,11 +312,56 @@
     return { title: isToday ? "Today" : niceDate(k), tab: isToday ? "today" : "week", back: isToday ? null : "#/week/" + weekOffsetOf(k), html: html };
   }
 
+  // ---------- quick add ----------
+  var quickOpen = false;
+  function qline(e) {
+    return e.protein + 'g protein &middot; ' + e.calories + ' cal<br>' + e.carbs + 'g carbs &middot; ' + e.fiber + 'g fiber';
+  }
+  function quickHtml(k) {
+    var list = getQuick(k), recent = getRecent(), html = '';
+    if (list.length) {
+      html += '<h3 class="group-h">&#9997;&#65039; Quick adds</h3><div class="rows">' + list.map(function (e) {
+        return '<div class="row on"><span class="re">&#9997;&#65039;</span><div class="txt"><b>' + esc(e.name) + '</b><small>' + qline(e) + '</small></div>' +
+          '<button class="xbtn" data-act="quick-del" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.name) + '">&times;</button></div>';
+      }).join("") + '</div>';
+    }
+    if (!quickOpen) {
+      return html + '<button class="btn soft" data-act="quick-open">+ Quick add (food not in the app)</button>';
+    }
+    function f(id, label, ph) {
+      return '<label class="qf"><span>' + label + '</span><input id="q-' + id + '" type="number" inputmode="decimal" min="0" step="any" placeholder="' + ph + '"></label>';
+    }
+    html += '<form class="quick" id="quick-form" autocomplete="off"><div class="qhead"><b>Quick add</b>' +
+      '<button type="button" class="xbtn" data-act="quick-close" aria-label="Close">&times;</button></div>';
+    if (recent.length) {
+      html += '<div class="qrecent"><span>Recent, one tap to add</span><div class="qchips">' + recent.map(function (e, i) {
+        return '<button type="button" data-act="quick-recent" data-id="' + i + '">' + esc(e.name) + ' &middot; ' + e.protein + 'g</button>';
+      }).join("") + '</div></div>';
+    }
+    html += '<label class="qf wide"><span>What was it?</span><input id="q-name" type="text" maxlength="40" placeholder="Protein bar, Chipotle bowl..." enterkeyhint="next"></label>' +
+      '<div class="qgrid">' + f("protein", "Protein g", "0") + f("calories", "Calories", "auto") +
+      f("carbs", "Carbs g", "0") + f("fat", "Fat g", "0") + f("fiber", "Fiber g", "0") + '</div>' +
+      '<p class="qnote" id="q-msg">Leave calories blank and it works them out from protein, carbs, and fat. Blank boxes count as 0.</p>' +
+      '<button type="submit" class="btn">Add to ' + (k === todayKey() ? 'Today' : niceDate(k)) + '</button></form>';
+    return html;
+  }
+  function num(id) {
+    var el = document.getElementById("q-" + id), v = el ? parseFloat(el.value) : NaN;
+    return isFinite(v) && v > 0 ? Math.round(v * 10) / 10 : 0;
+  }
+  function addQuick(k, e) {
+    var list = getQuick(k);
+    e.id = "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    list.push(e);
+    setQuick(k, list);
+    rememberRecent(e);
+  }
+
   function proteinStreak(T) {
     var d = new Date(), n = 0;
-    if (totals(getDay(dateKey(d))).protein < T.proteinMin) d = addDays(d, -1);   // today is still in progress
+    if (dayTotals(dateKey(d)).protein < T.proteinMin) d = addDays(d, -1);   // today is still in progress
     for (var i = 0; i < 730; i++) {
-      if (totals(getDay(dateKey(d))).protein >= T.proteinMin) { n++; d = addDays(d, -1); } else break;
+      if (dayTotals(dateKey(d)).protein >= T.proteinMin) { n++; d = addDays(d, -1); } else break;
     }
     return n;
   }
@@ -324,7 +393,7 @@
 
   function screenWeek(off) {
     var T = getTargets(), M = metrics(T), tk = todayKey(), start = addDays(weekStart(new Date()), off * 7), days = [], i;
-    for (i = 0; i < 7; i++) { var d = addDays(start, i), k = dateKey(d); days.push({ d: d, k: k, t: totals(getDay(k)), future: k > tk }); }
+    for (i = 0; i < 7; i++) { var d = addDays(start, i), k = dateKey(d); days.push({ d: d, k: k, t: dayTotals(k), future: k > tk }); }
     var m = M.filter(function (x) { return x.key === weekMetric; })[0] || M[0];
     var end = days[6].d, logged = days.filter(function (x) { return x.t.count; });
     var range = MON[start.getMonth()] + " " + start.getDate() + " to " + (end.getMonth() !== start.getMonth() ? MON[end.getMonth()] + " " : "") + end.getDate();
@@ -440,7 +509,7 @@
         return '<button data-act="theme" data-id="' + t + '"' + (t === theme ? ' class="on"' : '') + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</button>';
       }).join("") + '</div>' +
       '<h3 class="group-h">Good to know</h3><p class="note">Tap the star on any meal to pin it to the top as a favorite. ' +
-      'Your log, favorites, and targets are saved on this phone only. Deleting the app from your home screen erases them.</p>';
+      'Your log, quick adds, favorites, and targets are saved on this phone only. Deleting the app from your home screen erases them.</p>';
     return { title: "Settings", tab: "", back: "#/", html: html };
   }
 
@@ -490,15 +559,29 @@
     if (act === "day-plus" || act === "day-minus") {
       d = getDay(curDay); bump(d, id, act === "day-plus" ? 1 : -1); setDay(curDay, d);
     } else if (act === "day-clear") {
-      setDay(curDay, {});
+      setDay(curDay, {}); setQuick(curDay, []);
     } else if (act === "repeat") {
-      setDay(curDay, JSON.parse(JSON.stringify(getDay(dateKey(addDays(parseKey(curDay), -1))))));
+      var pk = dateKey(addDays(parseKey(curDay), -1));
+      setDay(curDay, JSON.parse(JSON.stringify(getDay(pk))));
+      setQuick(curDay, getQuick(pk).map(function (x, i) { var c = JSON.parse(JSON.stringify(x)); c.id = "q" + Date.now().toString(36) + i; return c; }));
     } else if (act === "plan-plus" || act === "plan-minus") {
       p = getPlan(); bump(p, id, act === "plan-plus" ? 1 : -1); setPlan(p);
     } else if (act === "plan-clear") {
       setPlan({}); setGot({});
     } else if (act === "got") {
       g = getGot(); if (g[id]) delete g[id]; else g[id] = true; setGot(g);
+    } else if (act === "quick-open") {
+      quickOpen = true;
+      e.preventDefault(); render(true);
+      var nm = document.getElementById("q-name"); if (nm) nm.focus();
+      return;
+    } else if (act === "quick-close") {
+      quickOpen = false;
+    } else if (act === "quick-del") {
+      setQuick(curDay, getQuick(curDay).filter(function (x) { return x.id !== id; }));
+    } else if (act === "quick-recent") {
+      var r = getRecent()[+id];
+      if (r) { addQuick(curDay, JSON.parse(JSON.stringify(r))); quickOpen = false; }
     } else if (act === "fav") {
       toggleFav(id);
     } else if (act === "metric") {
@@ -515,6 +598,26 @@
     } else return;
     if (act.indexOf("-plus") > 0 || act.indexOf("-minus") > 0) popId = id;
     e.preventDefault();
+    render(true);
+  });
+
+  // Quick add form
+  view.addEventListener("submit", function (e) {
+    if (!e.target || e.target.id !== "quick-form") return;
+    e.preventDefault();
+    var en = {
+      name: (document.getElementById("q-name").value || "").trim() || "Quick add",
+      protein: num("protein"), carbs: num("carbs"), fat: num("fat"), fiber: num("fiber"), calories: num("calories")
+    };
+    if (!en.calories) en.calories = Math.round(en.protein * 4 + en.carbs * 4 + en.fat * 9);
+    if (!en.protein && !en.carbs && !en.fat && !en.fiber && !en.calories) {
+      var msg = document.getElementById("q-msg");
+      if (msg) { msg.textContent = "Enter at least one number."; msg.classList.add("err"); }
+      return;
+    }
+    if (document.activeElement) document.activeElement.blur();
+    addQuick(curDay, en);
+    quickOpen = false;
     render(true);
   });
 
@@ -550,9 +653,9 @@
   if (["auto", "light", "dark"].indexOf(theme) < 0) theme = "auto";
   applyTheme(theme);
 
-  window.addEventListener("hashchange", function () { render(false); });
+  window.addEventListener("hashchange", function () { quickOpen = false; render(false); });
   // Coming back to the app the next morning: refresh so Today moves to the new day.
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) render(true); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !quickOpen) render(true); });
   render(false);
 
   if ("serviceWorker" in navigator) {
